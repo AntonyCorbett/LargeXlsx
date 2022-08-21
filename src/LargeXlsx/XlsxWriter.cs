@@ -36,7 +36,7 @@ using SharpCompress.Writers.Zip;
 
 namespace LargeXlsx
 {
-    public class XlsxWriter : IDisposable
+    public sealed class XlsxWriter : IDisposable
     {
         private const int MaxSheetNameLength = 31;
         private readonly ZipWriter _zipWriter;
@@ -45,6 +45,7 @@ namespace LargeXlsx
         private readonly SharedStringTable _sharedStringTable;
         private Worksheet _currentWorksheet;
         private bool _hasFormulasWithoutResult;
+        private bool _disposed;
 
         public XlsxStyle DefaultStyle { get; private set; }
         public int CurrentRowNumber => _currentWorksheet.CurrentRowNumber;
@@ -65,11 +66,15 @@ namespace LargeXlsx
 
         public void Dispose()
         {
-            _currentWorksheet?.Dispose();
-            _stylesheet.Save(_zipWriter);
-            _sharedStringTable.Save(_zipWriter);
-            Save();
-            _zipWriter.Dispose();
+            if (!_disposed)
+            {
+                _currentWorksheet?.Dispose();
+                _stylesheet.Save(_zipWriter);
+                _sharedStringTable.Save(_zipWriter);
+                Save();
+                _zipWriter.Dispose();
+                _disposed = true;
+            }
         }
 
         private void Save()

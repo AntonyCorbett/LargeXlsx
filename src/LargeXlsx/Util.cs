@@ -33,8 +33,10 @@ namespace LargeXlsx
 {
     internal static class Util
     {
+        private const int MaxColumnCount = 16384;
         private static readonly DateTime ExcelEpoch = new DateTime(1900, 1, 1);
         private static readonly DateTime Date19000301 = new DateTime(1900, 3, 1);
+        private static readonly string[] CachedColumnNames = new string[MaxColumnCount];
 
         public static string EscapeXmlText(string value)
         {
@@ -68,9 +70,20 @@ namespace LargeXlsx
 
         public static string GetColumnName(int columnIndex)
         {
-            if (columnIndex < 1 || columnIndex > 16384)
-                throw new ArgumentOutOfRangeException();
-            var columnName = new StringBuilder(3);
+            if (columnIndex < 1 || columnIndex > MaxColumnCount)
+                throw new InvalidOperationException($"A worksheet can contain at most {MaxColumnCount} columns ({columnIndex} attempted)");
+            var columnName = CachedColumnNames[columnIndex - 1];
+            if (columnName == null)
+            {
+                columnName = GetColumnNameInternal(columnIndex);
+                CachedColumnNames[columnIndex - 1] = columnName;
+            }
+            return columnName;
+        }
+
+        private static string GetColumnNameInternal(int columnIndex)
+        {
+            var columnName = new StringBuilder(3); // This has been measured to be faster than string concatenation
             while (true)
             {
                 if (columnIndex > 26)

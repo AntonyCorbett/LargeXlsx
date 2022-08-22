@@ -29,11 +29,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using SharpCompress.Writers.Zip;
 
 namespace LargeXlsx
 {
-    internal class Worksheet : IDisposable
+    internal sealed class Worksheet : IDisposable
     {
         private const int MinSheetProtectionPasswordLength = 1;
         private const int MaxSheetProtectionPasswordLength = 255;
@@ -44,6 +45,7 @@ namespace LargeXlsx
         private readonly SharedStringTable _sharedStringTable;
         private readonly List<string> _mergedCellRefs;
         private readonly Dictionary<XlsxDataValidation, List<string>> _cellRefsByDataValidation;
+        private readonly StringBuilder _stringBuilder = new StringBuilder();
         private string _autoFilterRef;
         private string _autoFilterAbsoluteRef;
         private XlsxSheetProtection _sheetProtection;
@@ -98,11 +100,35 @@ namespace LargeXlsx
                 throw new InvalidOperationException($"A worksheet can contain at most {MaxRowNumbers} rows ({CurrentRowNumber + 1} attempted)");
             CurrentRowNumber++;
             CurrentColumnNumber = 1;
-            _streamWriter.Write("<row r=\"{0}\"", CurrentRowNumber);
-            if (height.HasValue) _streamWriter.Write(" ht=\"{0}\" customHeight=\"1\"", height);
-            if (hidden) _streamWriter.Write(" hidden=\"1\"");
-            if (style != null) _streamWriter.Write(" s=\"{0}\" customFormat=\"1\"", _stylesheet.ResolveStyleId(style));
-            _streamWriter.WriteLine(">");
+
+            _stringBuilder.Clear();
+
+            _stringBuilder.Append("<row r=\"");
+            _stringBuilder.Append(CurrentRowNumber.ToString());
+            _stringBuilder.Append('\"');
+
+            if (height.HasValue)
+            {
+                _stringBuilder.Append(" ht=\"");
+                _stringBuilder.Append(height.ToString());
+                _stringBuilder.Append("\" customHeight=\"1\"");
+            }
+
+            if (hidden)
+            {
+                _stringBuilder.Append(" hidden=\"1\"");
+            }
+
+            if (style != null)
+            {
+                _stringBuilder.Append(" s=\"");
+                _stringBuilder.Append(_stylesheet.ResolveStyleId(style).ToString());
+                _stringBuilder.Append("\" customFormat=\"1\"");
+            }
+
+            _stringBuilder.Append('>');
+
+            _streamWriter.WriteLine(_stringBuilder.ToString());
         }
 
         public void SkipRows(int rowCount)
@@ -123,8 +149,20 @@ namespace LargeXlsx
         {
             EnsureRow();
             var resolveStyleId = _stylesheet.ResolveStyleId(style);
+
             for (var i = 0; i < repeatCount; i++)
-                _streamWriter.WriteLine("<c r=\"{0}{1}\" s=\"{2}\"/>", Util.GetColumnName(CurrentColumnNumber++), CurrentRowNumber, resolveStyleId);
+            {
+                _stringBuilder.Clear();
+
+                _stringBuilder.Append("<c r=\"");
+                _stringBuilder.Append(Util.GetColumnName(CurrentColumnNumber++));
+                _stringBuilder.Append(CurrentRowNumber.ToString());
+                _stringBuilder.Append("\" s=\"");
+                _stringBuilder.Append(resolveStyleId.ToString());
+                _stringBuilder.Append("\"/>");
+
+                _streamWriter.WriteLine(_stringBuilder.ToString());
+            }
         }
 
         public void Write(string value, XlsxStyle style)
@@ -136,34 +174,88 @@ namespace LargeXlsx
             }
 
             EnsureRow();
-            _streamWriter.WriteLine("<c r=\"{0}{1}\" s=\"{2}\" t=\"inlineStr\"><is><t>{3}</t></is></c>",
-                Util.GetColumnName(CurrentColumnNumber), CurrentRowNumber, _stylesheet.ResolveStyleId(style), Util.EscapeXmlText(value));
+
+            _stringBuilder.Clear();
+
+            _stringBuilder.Append("<c r=\"");
+            _stringBuilder.Append(Util.GetColumnName(CurrentColumnNumber));
+            _stringBuilder.Append(CurrentRowNumber.ToString());
+            _stringBuilder.Append("\" s=\"");
+            _stringBuilder.Append(_stylesheet.ResolveStyleId(style).ToString());
+            _stringBuilder.Append("\" t=\"inlineStr\"><is><t>");
+            _stringBuilder.Append(Util.EscapeXmlText(value));
+            _stringBuilder.Append("</t></is></c>");
+                
+            _streamWriter.WriteLine(_stringBuilder.ToString());
             CurrentColumnNumber++;
         }
 
         public void Write(double value, XlsxStyle style)
         {
             EnsureRow();
-            _streamWriter.WriteLine("<c r=\"{0}{1}\" s=\"{2}\"><v>{3}</v></c>",
-                Util.GetColumnName(CurrentColumnNumber), CurrentRowNumber, _stylesheet.ResolveStyleId(style), value);
+
+            _stringBuilder.Clear();
+
+            _stringBuilder.Append("<c r=\"");
+            _stringBuilder.Append(Util.GetColumnName(CurrentColumnNumber));
+            _stringBuilder.Append(CurrentRowNumber.ToString());
+            _stringBuilder.Append("\" s=\"");
+            _stringBuilder.Append(_stylesheet.ResolveStyleId(style).ToString());
+            _stringBuilder.Append("\"><v>");
+            _stringBuilder.Append(value.ToString(CultureInfo.InvariantCulture));
+            _stringBuilder.Append("</v></c>");
+
+            _streamWriter.WriteLine(_stringBuilder.ToString());
+
             CurrentColumnNumber++;
         }
 
         public void WriteFormula(string formula, XlsxStyle style, IConvertible result)
         {
             EnsureRow();
-            _streamWriter.WriteLine("<c r=\"{0}{1}\" s=\"{2}\" t=\"str\"><f>{3}</f>",
-                Util.GetColumnName(CurrentColumnNumber), CurrentRowNumber, _stylesheet.ResolveStyleId(style), Util.EscapeXmlText(formula));
-            if (result != null) _streamWriter.Write("<v>{0}</v>", Util.EscapeXmlText(result.ToString(CultureInfo.InvariantCulture)));
-            _streamWriter.Write("</c>");
+
+            _stringBuilder.Clear();
+
+            _stringBuilder.Append("<c r=\"");
+            _stringBuilder.Append(Util.GetColumnName(CurrentColumnNumber));
+            _stringBuilder.Append(CurrentRowNumber.ToString());
+            _stringBuilder.Append("\" s=\"");
+            _stringBuilder.Append(_stylesheet.ResolveStyleId(style).ToString());
+            _stringBuilder.Append("\" t=\"str\"><f>");
+            _stringBuilder.Append(Util.EscapeXmlText(formula));
+            _stringBuilder.Append("</f>");
+
+            if (result != null)
+            {
+                _stringBuilder.Append("<v>");
+                _stringBuilder.Append(Util.EscapeXmlText(result.ToString(CultureInfo.InvariantCulture)));
+                _stringBuilder.Append("</v>");
+            }
+
+            _stringBuilder.Append("</c>");
+
+            _streamWriter.Write(_stringBuilder.ToString());
+
             CurrentColumnNumber++;
         }
 
         public void WriteSharedString(string value, XlsxStyle style)
         {
             EnsureRow();
-            _streamWriter.WriteLine("<c r=\"{0}{1}\" s=\"{2}\" t=\"s\"><v>{3}</v></c>",
-                Util.GetColumnName(CurrentColumnNumber), CurrentRowNumber, _stylesheet.ResolveStyleId(style), _sharedStringTable.ResolveStringId(value));
+
+            _stringBuilder.Clear();
+
+            _stringBuilder.Append("<c r=\"");
+            _stringBuilder.Append(Util.GetColumnName(CurrentColumnNumber));
+            _stringBuilder.Append(CurrentRowNumber.ToString());
+            _stringBuilder.Append("\" s=\"");
+            _stringBuilder.Append(_stylesheet.ResolveStyleId(style).ToString());
+            _stringBuilder.Append("\" t=\"s\"><v>");
+            _stringBuilder.Append(_sharedStringTable.ResolveStringId(value).ToString());
+            _stringBuilder.Append("</v></c>");
+            
+            _streamWriter.Write(_stringBuilder.ToString());
+
             CurrentColumnNumber++;
         }
 

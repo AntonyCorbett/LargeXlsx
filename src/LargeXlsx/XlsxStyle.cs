@@ -68,13 +68,7 @@ namespace LargeXlsx
 
         public override int GetHashCode()
         {
-            var hashCode = 428549002;
-            hashCode = hashCode * -1521134295 + Font.GetHashCode();
-            hashCode = hashCode * -1521134295 + Fill.GetHashCode();
-            hashCode = hashCode * -1521134295 + Border.GetHashCode();
-            hashCode = hashCode * -1521134295 + NumberFormat.GetHashCode();
-            if (Alignment != null) hashCode = hashCode * -1521134295 + Alignment.GetHashCode();
-            return hashCode;
+            return (Font, Fill, Border, NumberFormat, Alignment).GetHashCode();
         }
 
         public static bool operator ==(XlsxStyle style1, XlsxStyle style2)

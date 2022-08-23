@@ -78,10 +78,7 @@ namespace LargeXlsx
 
             public override int GetHashCode()
             {
-                unchecked
-                {
-                    return (Color.GetHashCode() * 397) ^ (int)Style;
-                }
+                return (Color, Style).GetHashCode();
             }
 
             public static bool operator ==(Line left, Line right)
@@ -139,17 +136,14 @@ namespace LargeXlsx
 
         public override int GetHashCode()
         {
-            unchecked
-            {
-                var hashCode = (Top != null ? Top.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Right != null ? Right.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Bottom != null ? Bottom.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Left != null ? Left.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Diagonal != null ? Diagonal.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ DiagonalDown.GetHashCode();
-                hashCode = (hashCode * 397) ^ DiagonalUp.GetHashCode();
-                return hashCode;
-            }
+            return (
+                Top,
+                Right,
+                Bottom,
+                Left,
+                Diagonal,
+                DiagonalDown,
+                DiagonalUp).GetHashCode();
         }
 
         public static bool operator ==(XlsxBorder left, XlsxBorder right)

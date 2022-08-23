@@ -94,23 +94,20 @@ namespace LargeXlsx
 
         public override int GetHashCode()
         {
-            unchecked
-            {
-                var hashCode = AllowBlank.GetHashCode();
-                hashCode = (hashCode * 397) ^ (Error != null ? Error.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (ErrorTitle != null ? ErrorTitle.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ ErrorStyleValue.GetHashCode();
-                hashCode = (hashCode * 397) ^ OperatorValue.GetHashCode();
-                hashCode = (hashCode * 397) ^ (Prompt != null ? Prompt.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (PromptTitle != null ? PromptTitle.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ ShowDropDown.GetHashCode();
-                hashCode = (hashCode * 397) ^ ShowErrorMessage.GetHashCode();
-                hashCode = (hashCode * 397) ^ ShowInputMessage.GetHashCode();
-                hashCode = (hashCode * 397) ^ ValidationTypeValue.GetHashCode();
-                hashCode = (hashCode * 397) ^ (Formula1 != null ? Formula1.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Formula2 != null ? Formula2.GetHashCode() : 0);
-                return hashCode;
-            }
+            return (
+                AllowBlank,
+                Error,
+                ErrorTitle,
+                ErrorStyleValue,
+                OperatorValue,
+                Prompt,
+                PromptTitle,
+                ShowDropDown,
+                ShowErrorMessage,
+                ShowInputMessage,
+                ValidationTypeValue,
+                Formula1,
+                Formula2).GetHashCode();
         }
 
         public static bool operator ==(XlsxDataValidation left, XlsxDataValidation right)

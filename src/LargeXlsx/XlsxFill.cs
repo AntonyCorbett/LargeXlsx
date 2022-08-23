@@ -63,10 +63,7 @@ namespace LargeXlsx
 
         public override int GetHashCode()
         {
-            var hashCode = 493172489;
-            hashCode = hashCode * -1521134295 + PatternType.GetHashCode();
-            hashCode = hashCode * -1521134295 + Color.GetHashCode();
-            return hashCode;
+            return (PatternType, Color).GetHashCode();
         }
 
         public static bool operator ==(XlsxFill fill1, XlsxFill fill2)

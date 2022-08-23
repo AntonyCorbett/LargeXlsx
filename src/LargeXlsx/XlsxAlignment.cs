@@ -103,18 +103,15 @@ namespace LargeXlsx
 
         public override int GetHashCode()
         {
-            unchecked
-            {
-                var hashCode = (int)HorizontalType;
-                hashCode = (hashCode * 397) ^ (int)VerticalType;
-                hashCode = (hashCode * 397) ^ Indent;
-                hashCode = (hashCode * 397) ^ JustifyLastLine.GetHashCode();
-                hashCode = (hashCode * 397) ^ (int)ReadingOrderType;
-                hashCode = (hashCode * 397) ^ ShrinkToFit.GetHashCode();
-                hashCode = (hashCode * 397) ^ TextRotation;
-                hashCode = (hashCode * 397) ^ WrapText.GetHashCode();
-                return hashCode;
-            }
+            return (
+                HorizontalType,
+                VerticalType,
+                Indent,
+                JustifyLastLine,
+                ReadingOrderType,
+                ShrinkToFit,
+                TextRotation,
+                WrapText).GetHashCode();
         }
 
         public static bool operator ==(XlsxAlignment left, XlsxAlignment right)

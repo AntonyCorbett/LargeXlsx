@@ -86,15 +86,14 @@ namespace LargeXlsx
 
         public override int GetHashCode()
         {
-            var hashCode = -1593953530;
-            hashCode = hashCode * -1521134295 + Name.GetHashCode();
-            hashCode = hashCode * -1521134295 + Size.GetHashCode();
-            hashCode = hashCode * -1521134295 + Color.GetHashCode();
-            hashCode = hashCode * -1521134295 + Bold.GetHashCode();
-            hashCode = hashCode * -1521134295 + Italic.GetHashCode();
-            hashCode = hashCode * -1521134295 + Strike.GetHashCode();
-            hashCode = hashCode * -1521134295 + UnderlineType.GetHashCode();
-            return hashCode;
+            return (
+                Name,
+                Size,
+                Color,
+                Bold,
+                Italic,
+                Strike,
+                UnderlineType).GetHashCode();
         }
 
         public static bool operator ==(XlsxFont font1, XlsxFont font2)

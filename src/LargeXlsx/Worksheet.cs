@@ -29,6 +29,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using SharpCompress.Writers.Zip;
 
 namespace LargeXlsx
@@ -105,7 +106,7 @@ namespace LargeXlsx
 
         public void Dispose()
         {
-            CloseLastRow();
+            CloseLastRowCoreAsync();
             _streamWriter.Write("</sheetData>\n");
             WriteSheetProtection();
             WriteAutoFilter();
@@ -119,32 +120,17 @@ namespace LargeXlsx
 
         public void BeginRow(double? height, bool hidden, XlsxStyle style)
         {
-            CloseLastRow();
-            if (CurrentRowNumber == MaxRowNumbers)
-                throw new InvalidOperationException($"A worksheet can contain at most {MaxRowNumbers} rows ({CurrentRowNumber + 1} attempted)");
-            CurrentRowNumber++;
-            _stringedCurrentRowNumber = null;
-            CurrentColumnNumber = 1;
-            _streamWriter.Write("<row");
-            if (_requireCellReferences || _needsRef)
-            {
-                _streamWriter.Write(" r=\"");
-                WriteCurrentRowNumber();
-                _streamWriter.Write("\"");
-                _needsRef = false;
-            }
-            if (height.HasValue)
-                _streamWriter.Write(" ht=\"{0}\" customHeight=\"1\"", height);
-            if (hidden)
-                _streamWriter.Write(" hidden=\"1\"");
-            if (style != null)
-                _streamWriter.Write(" s=\"{0}\" customFormat=\"1\"", _stylesheet.ResolveStyleId(style));
-            _streamWriter.Write(">\n");
+            BeginRowCoreAsync(sync: true, height, hidden, style).GetAwaiter().GetResult();
+        }
+
+        public Task BeginRowAsync(double? height, bool hidden, XlsxStyle style)
+        {
+            return BeginRowCoreAsync(sync: false, height, hidden, style);
         }
 
         public void SkipRows(int rowCount)
         {
-            CloseLastRow();
+            CloseLastRowCoreAsync();
             _needsRef = true;
             if (CurrentRowNumber + rowCount > MaxRowNumbers)
                 throw new InvalidOperationException($"A worksheet can contain at most {MaxRowNumbers} rows ({CurrentRowNumber + rowCount} attempted)");
@@ -318,9 +304,28 @@ namespace LargeXlsx
 
         private void WriteCurrentRowNumber()
         {
+            WriteCurrentRowNumberCoreAsync(sync: true).GetAwaiter().GetResult();
+        }
+
+        private Task WriteCurrentRowNumberAsync()
+        {
+            return WriteCurrentRowNumberCoreAsync(sync: false);
+        }
+
+        private async Task WriteCurrentRowNumberCoreAsync(bool sync)
+        {
             if (_stringedCurrentRowNumber == null)
                 _stringedCurrentRowNumber = CurrentRowNumber.ToString();
-            _streamWriter.Write(_stringedCurrentRowNumber);
+
+            if (sync)
+            {
+                // ReSharper disable once MethodHasAsyncOverload
+                _streamWriter.Write(_stringedCurrentRowNumber);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(_stringedCurrentRowNumber);
+            }
         }
 
         private void WriteStyle(int styleId)
@@ -340,13 +345,34 @@ namespace LargeXlsx
                 throw new InvalidOperationException($"{nameof(BeginRow)} not called");
         }
 
-        private void CloseLastRow()
+        private async Task CloseLastRowCoreAsync(bool sync)
         {
             if (CurrentColumnNumber > 0)
             {
-                _streamWriter.Write("</row>\n");
+                const string rowEndString = "</row>\n";
+
+                if (sync)
+                {
+                    _streamWriter.Write(rowEndString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(rowEndString);
+                }
+
+
                 CurrentColumnNumber = 0;
             }
+        }
+
+        private Task CloseLastRowAsync()
+        {
+            return CloseLastRowCoreAsync(sync: false);
+        }
+
+        private void CloseLastRow()
+        {
+            CloseLastRowCoreAsync(sync: true).GetAwaiter().GetResult();
         }
 
         private void FreezePanes(int fromRow, int fromColumn)
@@ -505,6 +531,111 @@ namespace LargeXlsx
             if (_headerFooter.FirstFooter != null)
                 _streamWriter.Append("<firstFooter>").AppendEscapedXmlText(_headerFooter.FirstFooter, _skipInvalidCharacters).Append("</firstFooter>");
             _streamWriter.Write("</headerFooter>");
+        }
+
+        private async Task BeginRowCoreAsync(bool sync, double? height, bool hidden, XlsxStyle style)
+        {
+            if (sync)
+            {
+                // ReSharper disable once MethodHasAsyncOverload
+                CloseLastRow();
+            }
+            else
+            {
+                await CloseLastRowAsync();
+            }
+
+            if (CurrentRowNumber == MaxRowNumbers)
+                throw new InvalidOperationException($"A worksheet can contain at most {MaxRowNumbers} rows ({CurrentRowNumber + 1} attempted)");
+            CurrentRowNumber++;
+            _stringedCurrentRowNumber = null;
+            CurrentColumnNumber = 1;
+
+            const string rowStartString = "<row";
+            if (sync)
+            {
+                // ReSharper disable once MethodHasAsyncOverload
+                _streamWriter.Write(rowStartString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(rowStartString);
+            }
+
+            if (_requireCellReferences || _needsRef)
+            {
+                const string refString = " r=\"";
+                const string quoteStr = "\"";
+                if (sync)
+                {
+                    // ReSharper disable once MethodHasAsyncOverload
+                    _streamWriter.Write(refString);
+                    // ReSharper disable once MethodHasAsyncOverload
+                    WriteCurrentRowNumber();
+                    // ReSharper disable once MethodHasAsyncOverload
+                    _streamWriter.Write(quoteStr);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(refString);
+                    await WriteCurrentRowNumberAsync();
+                    await _streamWriter.WriteAsync(quoteStr);
+                }
+                
+                _needsRef = false;
+            }
+
+            if (height.HasValue)
+            {
+                var heightString = $" ht=\"{height}\" customHeight=\"1\"";
+                if (sync)
+                {
+                    // ReSharper disable once MethodHasAsyncOverload
+                    _streamWriter.Write(heightString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(heightString);
+                }
+            }
+
+            if (hidden)
+            {
+                const string hiddenString = " hidden=\"1\"";
+                if (sync)
+                {
+                    // ReSharper disable once MethodHasAsyncOverload
+                    _streamWriter.Write(hiddenString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(hiddenString);
+                }
+            }
+
+            if (style != null)
+            {
+                var styleString = $" s=\"{_stylesheet.ResolveStyleId(style)}\" customFormat=\"1\"";
+                if (sync)
+                {
+                    // ReSharper disable once MethodHasAsyncOverload
+                    _streamWriter.Write(styleString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(styleString);
+                }
+            }
+
+            if (sync)
+            {
+                // ReSharper disable once MethodHasAsyncOverload
+                _streamWriter.Write(">\n");
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(">\n");
+            }
         }
     }
 }

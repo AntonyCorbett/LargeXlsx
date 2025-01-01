@@ -30,6 +30,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 using SharpCompress.Common;
 using SharpCompress.Compressors.Deflate;
 using SharpCompress.Writers;
@@ -251,8 +252,13 @@ namespace LargeXlsx
         public XlsxWriter BeginRow(double? height = null, bool hidden = false, XlsxStyle style = null)
         {
             CheckInWorksheet();
-            _currentWorksheet.BeginRow(height, hidden, style);
-            return this;
+            return BeginRowCoreAsync(sync: true, height, hidden, style).GetAwaiter().GetResult();
+        }
+
+        public Task<XlsxWriter> BeginRowAsync(double? height = null, bool hidden = false, XlsxStyle style = null)
+        {
+            CheckInWorksheet();
+            return BeginRowCoreAsync(sync: false, height, hidden, style);
         }
 
         public XlsxWriter SkipColumns(int columnCount)
@@ -412,6 +418,22 @@ namespace LargeXlsx
         {
             if (_currentWorksheet == null)
                 throw new InvalidOperationException($"{nameof(BeginWorksheet)} not called");
+        }
+
+        private async Task<XlsxWriter> BeginRowCoreAsync(bool sync, double? height = null, bool hidden = false, XlsxStyle style = null)
+        {
+            CheckInWorksheet();
+
+            if (sync)
+            {
+                _currentWorksheet.BeginRow(height, hidden, style);
+            }
+            else
+            {
+                await _currentWorksheet.BeginRowAsync(height, hidden, style);
+            }
+
+            return this;
         }
     }
 }

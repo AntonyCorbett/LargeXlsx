@@ -115,7 +115,6 @@ namespace LargeXlsx
 
             if (sync)
             {
-                // ReSharper disable once MethodHasAsyncOverload
                 _streamWriter.Write(s);
             }
             else
@@ -139,10 +138,8 @@ namespace LargeXlsx
             const string closingXml2 = "<sheetData>\n";
             if (sync)
             {
-                // ReSharper disable once MethodHasAsyncOverload
                 _streamWriter.Write(closingXml);
                 WriteColumnsCoreAsync(columns, sync: true).GetAwaiter().GetResult();
-                // ReSharper disable once MethodHasAsyncOverload
                 _streamWriter.Write(closingXml2);
             }
             else
@@ -265,7 +262,6 @@ namespace LargeXlsx
             const string rowStartString = "<row";
             if (sync)
             {
-                // ReSharper disable once MethodHasAsyncOverload
                 _streamWriter.Write(rowStartString);
             }
             else
@@ -690,7 +686,7 @@ namespace LargeXlsx
 
             if (sync)
             {
-                _streamWriter.Write("<c");
+                _streamWriter.Write(openingString);
                 WriteCellRefCoreAsync(sync: true).GetAwaiter().GetResult();
                 WriteStyleCoreAsync(style, sync: true).GetAwaiter().GetResult();
             }
@@ -877,7 +873,7 @@ namespace LargeXlsx
                 }
                 else
                 {
-                    await _streamWriter.WriteAsync(" r=\"");
+                    await _streamWriter.WriteAsync(openingString);
                     await _streamWriter.WriteAsync(columnName);
                     await WriteCurrentRowNumberCoreAsync(sync: false);
                     await _streamWriter.WriteAsync(closingString);

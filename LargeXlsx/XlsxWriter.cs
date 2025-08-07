@@ -225,7 +225,7 @@ namespace LargeXlsx
             if (_worksheets.Any(ws => string.Equals(ws.Name, name, StringComparison.InvariantCultureIgnoreCase)))
                 throw new ArgumentException($"A worksheet named \"{name}\" has already been added");
             _currentWorksheet?.Dispose();
-            _currentWorksheet = new Worksheet(
+            _currentWorksheet = Worksheet.Create(
                 zipArchive: _zipArchive,
                 compressionLevel: _compressionLevel,
                 id: _worksheets.Count + 1,

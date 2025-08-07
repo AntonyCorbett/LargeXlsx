@@ -29,7 +29,9 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 using System.Xml;
+// ReSharper disable MethodHasAsyncOverload
 
 namespace LargeXlsx
 {
@@ -45,9 +47,21 @@ namespace LargeXlsx
             return textWriter;
         }
 
+        public static async Task<TextWriter> AppendAsync(this TextWriter textWriter, string value)
+        {
+            await textWriter.WriteAsync(value);
+            return textWriter;
+        }
+        
         public static TextWriter Append(this TextWriter textWriter, double value)
         {
             textWriter.Write(value);
+            return textWriter;
+        }
+
+        public static async Task<TextWriter> AppendAsync(this TextWriter textWriter, double value)
+        {
+            await textWriter.WriteAsync(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
             return textWriter;
         }
 
@@ -57,13 +71,40 @@ namespace LargeXlsx
             return textWriter;
         }
 
+        public static async Task<TextWriter> AppendAsync(this TextWriter textWriter, decimal value)
+        {
+            await textWriter.WriteAsync(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return textWriter;
+        }
+
         public static TextWriter Append(this TextWriter textWriter, int value)
         {
             textWriter.Write(value);
             return textWriter;
         }
 
+        public static async Task<TextWriter> AppendAsync(this TextWriter textWriter, int value)
+        {
+            await textWriter.WriteAsync(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return textWriter;
+        }
+
         public static TextWriter AppendEscapedXmlText(this TextWriter textWriter, string value, bool skipInvalidCharacters)
+        {
+            return AppendEscapedXmlTextCoreAsync(
+                textWriter, value, skipInvalidCharacters, sync: true).GetAwaiter().GetResult();
+        }
+
+        public static Task<TextWriter> AppendEscapedXmlTextAsync(this TextWriter textWriter, string value, bool skipInvalidCharacters)
+        {
+            return AppendEscapedXmlTextCoreAsync(
+                textWriter, value, skipInvalidCharacters, sync: false);
+        }
+
+#pragma warning disable U2U1009
+        private static async Task<TextWriter> AppendEscapedXmlTextCoreAsync(
+#pragma warning restore U2U1009
+            this TextWriter textWriter, string value, bool skipInvalidCharacters, bool sync)
         {
             // A plain old for provides a measurable improvement on garbage collection
             for (var i = 0; i < value.Length; i++)
@@ -71,15 +112,67 @@ namespace LargeXlsx
                 var c = value[i];
                 if (XmlConvert.IsXmlChar(c))
                 {
-                    if (c == '<') textWriter.Write("&lt;");
-                    else if (c == '>') textWriter.Write("&gt;");
-                    else if (c == '&') textWriter.Write("&amp;");
-                    else textWriter.Write(c);
+                    if (c == '<')
+                    {
+                        const string lessThanString = "&lt;";
+                        if (sync)
+                        {
+                            textWriter.Write(lessThanString);
+                        }
+                        else
+                        {
+                            await textWriter.WriteAsync(lessThanString);
+                        }
+                    }
+                    else if (c == '>')
+                    {
+                        const string greaterThanString = "&gt;";
+                        
+                        if (sync)
+                        {
+                            textWriter.Write(greaterThanString);
+                        }
+                        else
+                        {
+                            await textWriter.WriteAsync(greaterThanString);
+                        }
+                    }
+                    else if (c == '&')
+                    {
+                        const string ampersandString = "&amp;";
+                        if (sync)
+                        {
+                            textWriter.Write(ampersandString);
+                        }
+                        else
+                        {
+                            await textWriter.WriteAsync(ampersandString);
+                        }
+                    }
+                    else
+                    {
+                        if (sync)
+                        {
+                            textWriter.Write(c);
+                        }
+                        else
+                        {
+                            await textWriter.WriteAsync(c);
+                        }
+                    }
                 }
                 else if (i < value.Length - 1 && XmlConvert.IsXmlSurrogatePair(value[i + 1], c))
                 {
-                    textWriter.Write(c);
-                    textWriter.Write(value[i + 1]);
+                    if (sync)
+                    {
+                        textWriter.Write(c);
+                        textWriter.Write(value[i + 1]);
+                    }
+                    else
+                    {
+                        await textWriter.WriteAsync(c);
+                        await textWriter.WriteAsync(value[i + 1]);
+                    }
                     i++;
                 }
                 else if (!skipInvalidCharacters)
@@ -87,8 +180,25 @@ namespace LargeXlsx
             }
             return textWriter;
         }
+        
+        public static TextWriter AppendEscapedXmlAttribute(
+            this TextWriter textWriter, string value, bool skipInvalidCharacters)
+        {
+            return AppendEscapedXmlAttributeCoreAsync(
+                textWriter, value, skipInvalidCharacters, sync: true).GetAwaiter().GetResult();
+        }
 
-        public static TextWriter AppendEscapedXmlAttribute(this TextWriter textWriter, string value, bool skipInvalidCharacters)
+        public static Task<TextWriter> AppendEscapedXmlAttributeAsync(
+            this TextWriter textWriter, string value, bool skipInvalidCharacters)
+        {
+            return AppendEscapedXmlAttributeCoreAsync(
+                textWriter, value, skipInvalidCharacters, sync: false);
+        }
+
+#pragma warning disable U2U1009
+        private static async Task<TextWriter> AppendEscapedXmlAttributeCoreAsync(
+#pragma warning restore U2U1009
+            this TextWriter textWriter, string value, bool skipInvalidCharacters, bool sync)
         {
             // A plain old for provides a measurable improvement on garbage collection
             for (var i = 0; i < value.Length; i++)
@@ -96,25 +206,99 @@ namespace LargeXlsx
                 var c = value[i];
                 if (XmlConvert.IsXmlChar(c))
                 {
-                    if (c == '<') textWriter.Write("&lt;");
-                    else if (c == '>') textWriter.Write("&gt;");
-                    else if (c == '&') textWriter.Write("&amp;");
-                    else if (c == '\'') textWriter.Write("&apos;");
-                    else if (c == '"') textWriter.Write("&quot;");
-                    else textWriter.Write(c);
+                    if (c == '<')
+                    {
+                        const string lessThanString = "&lt;";
+                        if (sync)
+                        {
+                            textWriter.Write(lessThanString);
+                        }
+                        else
+                        {
+                            await textWriter.WriteAsync(lessThanString);
+                        }
+                    }
+                    else if (c == '>')
+                    {
+                        const string greaterThanString = "&gt;";
+                        if (sync)
+                        {
+                            textWriter.Write(greaterThanString);
+                        }
+                        else
+                        {
+                            await textWriter.WriteAsync(greaterThanString);
+                        }
+                    }
+                    else if (c == '&')
+                    {
+                        const string ampersandString = "&amp;";
+                        if (sync)
+                        {
+                            textWriter.Write(ampersandString);
+                        }
+                        else
+                        {
+                            await textWriter.WriteAsync(ampersandString);
+                        }
+                    }
+                    else if (c == '\'')
+                    {
+                        const string apostropheString = "&apos;";
+                        if (sync)
+                        {
+                            textWriter.Write(apostropheString);
+                        }
+                        else
+                        {
+                            await textWriter.WriteAsync(apostropheString);
+                        }
+                    }
+                    else if (c == '"')
+                    {
+                        const string quoteString = "&quot;";
+                        if (sync)
+                        {
+                            textWriter.Write(quoteString);
+                        }
+                        else
+                        {
+                            await textWriter.WriteAsync(quoteString);
+                        }
+                    }
+                    else
+                    {
+                        if (sync)
+                        {
+                            textWriter.Write(c);
+                        }
+                        else
+                        {
+                            await textWriter.WriteAsync(c);
+                        }
+                    }
                 }
                 else if (i < value.Length - 1 && XmlConvert.IsXmlSurrogatePair(value[i + 1], c))
                 {
-                    textWriter.Write(c);
-                    textWriter.Write(value[i + 1]);
+                    if (sync)
+                    {
+                        textWriter.Write(c);
+                        textWriter.Write(value[i + 1]);
+                    }
+                    else
+                    {
+                        await textWriter.WriteAsync(c);
+                        await textWriter.WriteAsync(value[i + 1]);
+                    }
+
                     i++;
                 }
-                else if (!skipInvalidCharacters) 
+                else if (!skipInvalidCharacters)
                     throw new XmlException($"Invalid XML character at position {i} in \"{value}\"");
             }
             return textWriter;
         }
-
+        
         public static string GetColumnName(int columnIndex)
         {
             if (columnIndex < 1 || columnIndex > Limits.MaxColumnCount)
@@ -178,10 +362,35 @@ namespace LargeXlsx
             return hash;
         }
 
-        public static TextWriter AddSpacePreserveIfNeeded(this TextWriter textWriter, string value)
+        public static TextWriter AddSpacePreserveIfNeeded(
+            this TextWriter textWriter, string value)
         {
-            if (value.Length > 0 && (XmlConvert.IsWhitespaceChar(value[0]) || XmlConvert.IsWhitespaceChar(value[value.Length - 1])))
-                textWriter.Write(" xml:space=\"preserve\"");
+            AddSpacePreserveIfNeededCoreAsync(textWriter, value, sync: true).GetAwaiter().GetResult();
+            return textWriter;
+        }
+
+        public static Task<TextWriter> AddSpacePreserveIfNeededAsync(
+            this TextWriter textWriter, string value)
+        {
+            return AddSpacePreserveIfNeededCoreAsync(textWriter, value, sync: false);
+        }
+
+        private static async Task<TextWriter> AddSpacePreserveIfNeededCoreAsync(
+            this TextWriter textWriter, string value, bool sync)
+        {
+            if (value.Length > 0 && (XmlConvert.IsWhitespaceChar(value[0]) ||
+                                     XmlConvert.IsWhitespaceChar(value[value.Length - 1])))
+            {
+                const string spacePreserve = " xml:space=\"preserve\"";
+                if (sync)
+                {
+                    textWriter.Write(spacePreserve);
+                }
+                else
+                {
+                    await textWriter.WriteAsync(spacePreserve);
+                }
+            }
             return textWriter;
         }
     }

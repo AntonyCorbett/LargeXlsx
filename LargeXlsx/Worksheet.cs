@@ -30,6 +30,15 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Threading.Tasks;
+
+// disable warning regarding early exists from async fns
+#pragma warning disable U2U1009
+
+// ReSharper disable MethodHasAsyncOverload
+
+// I have chosen the "bool hack" to implement the dual sync/async API
+// https://learn.microsoft.com/en-us/archive/msdn-magazine/2015/july/async-programming-brownfield-async-development#the-flag-argument-hack
 
 namespace LargeXlsx
 {
@@ -59,19 +68,13 @@ namespace LargeXlsx
         public int CurrentColumnNumber { get; private set; }
         internal string AutoFilterAbsoluteRef => _autoFilterAbsoluteRef;
 
-        public Worksheet(
+        private Worksheet(
             ZipArchive zipArchive,
             CompressionLevel compressionLevel,
             int id,
             string name,
-            int splitRow,
-            int splitColumn,
-            bool rightToLeft,
             Stylesheet stylesheet,
             SharedStringTable sharedStringTable,
-            IEnumerable<XlsxColumn> columns,
-            bool showGridLines,
-            bool showHeaders,
             bool requireCellReferences,
             bool skipInvalidCharacters,
             XlsxWorksheetState state)
@@ -92,30 +95,146 @@ namespace LargeXlsx
             var entry = zipArchive.CreateEntry($"xl/worksheets/sheet{id}.xml", compressionLevel);
             _stream = entry.Open();
             _streamWriter = new InvariantCultureStreamWriter(_stream);
-
-            _streamWriter.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-                                + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
-                                + "<sheetViews>"
-                                + $"<sheetView showGridLines=\"{Util.BoolToInt(showGridLines)}\" showRowColHeaders=\"{Util.BoolToInt(showHeaders)}\""
-                                + $" rightToLeft=\"{Util.BoolToInt(rightToLeft)}\" workbookViewId=\"0\">\n");
-
-            if (splitRow > 0 || splitColumn > 0)
-                FreezePanes(splitRow, splitColumn);
-            _streamWriter.Write("</sheetView></sheetViews>\n");
-            WriteColumns(columns);
-            _streamWriter.Write("<sheetData>\n");
         }
 
+        private async Task InitializeCoreAsync(
+            bool showGridLines,
+            bool showHeaders,
+            bool rightToLeft,
+            int splitRow,
+            int splitColumn,
+            IEnumerable<XlsxColumn> columns,
+            bool sync)
+        {
+            var s =
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
+                + "<sheetViews>"
+                + $"<sheetView showGridLines=\"{Util.BoolToInt(showGridLines)}\" showRowColHeaders=\"{Util.BoolToInt(showHeaders)}\""
+                + $" rightToLeft=\"{Util.BoolToInt(rightToLeft)}\" workbookViewId=\"0\">\n";
+
+            if (sync)
+            {
+                // ReSharper disable once MethodHasAsyncOverload
+                _streamWriter.Write(s);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(s);
+            }
+
+            if (splitRow > 0 || splitColumn > 0)
+            {
+                if (sync)
+                {
+                    FreezePanesCoreAsync(splitRow, splitColumn, sync: true).GetAwaiter().GetResult();
+                }
+                else
+                {
+                    await FreezePanesCoreAsync(splitRow, splitColumn, sync: false);
+                }
+            }
+
+            const string closingXml = "</sheetView></sheetViews>\n";
+            const string closingXml2 = "<sheetData>\n";
+            if (sync)
+            {
+                // ReSharper disable once MethodHasAsyncOverload
+                _streamWriter.Write(closingXml);
+                WriteColumnsCoreAsync(columns, sync: true).GetAwaiter().GetResult();
+                // ReSharper disable once MethodHasAsyncOverload
+                _streamWriter.Write(closingXml2);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(closingXml);
+                await WriteColumnsCoreAsync(columns, sync: false);
+                await _streamWriter.WriteAsync(closingXml2);
+            }
+        }
+
+        public static Worksheet Create(
+            ZipArchive zipArchive,
+            CompressionLevel compressionLevel,
+            int id,
+            string name,
+            int splitRow,
+            int splitColumn,
+            bool rightToLeft,
+            Stylesheet stylesheet,
+            SharedStringTable sharedStringTable,
+            IEnumerable<XlsxColumn> columns,
+            bool showGridLines,
+            bool showHeaders,
+            bool requireCellReferences,
+            bool skipInvalidCharacters,
+            XlsxWorksheetState state)
+        {
+            var worksheet = new Worksheet(
+                zipArchive,
+                compressionLevel,
+                id,
+                name,
+                stylesheet,
+                sharedStringTable,
+                requireCellReferences,
+                skipInvalidCharacters,
+                state);
+
+            worksheet.InitializeCoreAsync(
+                showGridLines, showHeaders, rightToLeft, splitRow, splitColumn, columns, sync: true)
+                .GetAwaiter().GetResult();
+
+            return worksheet;
+        }
+
+        public async Task<Worksheet> CreateAsync(
+            ZipArchive zipArchive,
+            CompressionLevel compressionLevel,
+            int id,
+            string name,
+            int splitRow,
+            int splitColumn,
+            bool rightToLeft,
+            Stylesheet stylesheet,
+            SharedStringTable sharedStringTable,
+            IEnumerable<XlsxColumn> columns,
+            bool showGridLines,
+            bool showHeaders,
+            bool requireCellReferences,
+            bool skipInvalidCharacters,
+            XlsxWorksheetState state)
+        {
+            var worksheet = new Worksheet(
+                zipArchive,
+                compressionLevel,
+                id,
+                name,
+                stylesheet,
+                sharedStringTable,
+                requireCellReferences,
+                skipInvalidCharacters,
+                state);
+
+            await worksheet.InitializeCoreAsync(
+                showGridLines, showHeaders, rightToLeft, splitRow, splitColumn, columns, sync: false);
+
+            return worksheet;
+        }
+
+        // consider async disposal if moving on from .NET Standard 2.0
         public void Dispose()
         {
-            CloseLastRow();
+            CloseLastRowCoreAsync(sync: true).GetAwaiter().GetResult();
             _streamWriter.Write("</sheetData>\n");
-            WriteSheetProtection();
-            WriteAutoFilter();
-            WriteMergedCells();
-            WriteDataValidations();
-            WriteHeaderFooter();
-            WritePageBreaks();
+            
+            WriteSheetProtectionCoreAsync(sync: true).GetAwaiter().GetResult();
+            WriteAutoFilterCoreAsync(sync: true).GetAwaiter().GetResult();
+            WriteMergedCellsCoreAsync(sync: true).GetAwaiter().GetResult();
+            WriteDataValidationsCoreAsync(sync: true).GetAwaiter().GetResult();
+            WriteHeaderFooterCoreAsync(sync: true).GetAwaiter().GetResult();
+            WritePageBreaksCoreAsync(sync: true).GetAwaiter().GetResult();
+            
             _streamWriter.Write("</worksheet>\n");
             _streamWriter.Dispose();
             _stream.Dispose();
@@ -123,38 +242,134 @@ namespace LargeXlsx
 
         public void BeginRow(double? height, bool hidden, XlsxStyle style)
         {
-            CloseLastRow();
+            BeginRowCoreAsync(height, hidden, style, sync: true).GetAwaiter().GetResult();
+        }
+
+        private async Task BeginRowCoreAsync(double? height, bool hidden, XlsxStyle style, bool sync)
+        {
+            if (sync)
+            {
+                CloseLastRowCoreAsync(sync: true).GetAwaiter().GetResult();
+            }
+            else
+            {
+                await CloseLastRowCoreAsync(sync: false);
+            }
+
             if (CurrentRowNumber == Limits.MaxRowCount)
                 throw new InvalidOperationException($"A worksheet can contain at most {Limits.MaxRowCount} rows ({CurrentRowNumber + 1} attempted)");
             CurrentRowNumber++;
             _stringedCurrentRowNumber = null;
             CurrentColumnNumber = 1;
-            _streamWriter.Write("<row");
+
+            const string rowStartString = "<row";
+            if (sync)
+            {
+                // ReSharper disable once MethodHasAsyncOverload
+                _streamWriter.Write(rowStartString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(rowStartString);
+            }
+
             if (_requireCellReferences || _needsRef)
             {
-                _streamWriter.Write(" r=\"");
-                WriteCurrentRowNumber();
-                _streamWriter.Write("\"");
+                const string ref1 = " r=\"";
+                const string ref2 = "\"";
+                if (sync)
+                {
+                    _streamWriter.Write(ref1);
+                    WriteCurrentRowNumberCoreAsync(sync: true).GetAwaiter().GetResult();
+                    _streamWriter.Write(ref2);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(ref1);
+                    await WriteCurrentRowNumberCoreAsync(sync: false);
+                    await _streamWriter.WriteAsync(ref2);
+                }
                 _needsRef = false;
             }
+
             if (height.HasValue)
-                _streamWriter.Write(" ht=\"{0}\" customHeight=\"1\"", height);
+            {
+                var heightString = $" ht=\"{height}\" customHeight=\"1\"";
+
+                if (sync)
+                {
+                    _streamWriter.Write(heightString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(heightString);
+                }
+            }
+
             if (hidden)
-                _streamWriter.Write(" hidden=\"1\"");
+            {
+                const string hiddenString = " hidden=\"1\"";
+                if (sync)
+                {
+                    _streamWriter.Write(hiddenString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(hiddenString);
+                }
+            }
+
             if (style != null)
-                _streamWriter.Write(" s=\"{0}\" customFormat=\"1\"", _stylesheet.ResolveStyleId(style));
-            _streamWriter.Write(">\n");
+            {
+                var styleString = $" s=\"{_stylesheet.ResolveStyleId(style)}\" customFormat=\"1\"";
+                if (sync)
+                {
+                    _streamWriter.Write(styleString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(styleString);
+                }
+            }
+
+            const string closingString = ">\n";
+            if (sync)
+            {
+                _streamWriter.Write(closingString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(closingString);
+            }
         }
 
-        public void SkipRows(int rowCount)
+        private async Task SkipRowsCoreAsync(int rowCount, bool sync)
         {
-            CloseLastRow();
+            if (sync)
+            {
+                CloseLastRowCoreAsync(sync: true).GetAwaiter().GetResult();
+            }
+            else
+            {
+                await CloseLastRowCoreAsync(sync: false);
+            }
             _needsRef = true;
             if (CurrentRowNumber + rowCount > Limits.MaxRowCount)
                 throw new InvalidOperationException($"A worksheet can contain at most {Limits.MaxRowCount} rows ({CurrentRowNumber + rowCount} attempted)");
             CurrentRowNumber += rowCount;
         }
 
+        public void SkipRows(int rowCount)
+        {
+            SkipRowsCoreAsync(rowCount, sync: true).GetAwaiter().GetResult();
+        }
+
+        public Task SkipRowsAsync(int rowCount)
+        {
+            return SkipRowsCoreAsync(rowCount, sync: false);
+        }
+
+        // no async version needed.
         public void SkipColumns(int columnCount)
         {
             EnsureRow();
@@ -162,120 +377,425 @@ namespace LargeXlsx
             CurrentColumnNumber += columnCount;
         }
 
-
         public void Write(XlsxStyle style, int repeatCount)
+        {
+            WriteCoreAsync(style, repeatCount, sync: true).GetAwaiter().GetResult();
+        }
+
+        public Task WriteAsync(XlsxStyle style, int repeatCount)
+        {
+            return WriteCoreAsync(style, repeatCount, sync: false);
+        }
+
+        private async Task WriteCoreAsync(XlsxStyle style, int repeatCount, bool sync)
         {
             EnsureRow();
             var styleId = _stylesheet.ResolveStyleId(style);
             for (var i = 0; i < repeatCount; i++)
             {
                 // <c r="{0}{1}" s="{2}"/>
-                _streamWriter.Write("<c");
-                WriteCellRef();
-                WriteStyle(styleId);
-                _streamWriter.Write("/>\n");
+
+                const string openingString = "<c";
+                const string closingString = "/>\n";
+                if (sync)
+                {
+                    _streamWriter.Write(openingString);
+                    WriteCellRefCoreAsync(sync: true).GetAwaiter().GetResult();
+                    WriteStyleCoreAsync(styleId, sync: true).GetAwaiter().GetResult();
+                    _streamWriter.Write(closingString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(openingString);
+                    await WriteCellRefCoreAsync(sync: false);
+                    await WriteStyleCoreAsync(styleId, sync: false);
+                    await _streamWriter.WriteAsync(closingString);
+                }
                 CurrentColumnNumber++;
             }
         }
 
         public void Write(string value, XlsxStyle style)
         {
+            WriteCoreAsync(value, style, sync: true).GetAwaiter().GetResult();
+        }
+
+        public Task WriteAsync(string value, XlsxStyle style)
+        {
+            return WriteCoreAsync(value, style, sync: false);
+        }
+
+        private async Task WriteCoreAsync(string value, XlsxStyle style, bool sync)
+        {
             if (value == null)
             {
-                Write(style, 1);
+                if (sync)
+                {
+                    Write(style, 1);
+                }
+                else
+                {
+                    await WriteAsync(style, 1);
+                }
+
                 return;
             }
+
             EnsureRow();
             // <c r="{0}{1}" s="{2}" t="inlineStr"><is><t xml:space="preserve">{3}</t></is></c>
-            _streamWriter.Write("<c");
-            WriteCellRef();
-            WriteStyle(style);
-            _streamWriter
-                .Append(" t=\"inlineStr\"><is><t")
-                .AddSpacePreserveIfNeeded(value)
-                .Append(">")
-                .AppendEscapedXmlText(value, _skipInvalidCharacters)
-                .Append("</t></is></c>\n");
+            const string openingString = "<c";
+            if (sync)
+            {
+                _streamWriter.Write(openingString);
+                WriteCellRefCoreAsync(sync: true).GetAwaiter().GetResult();
+                WriteStyleCoreAsync(style, sync: true).GetAwaiter().GetResult();
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(openingString);
+                await WriteCellRefCoreAsync(sync: false);
+                await WriteStyleCoreAsync(style, sync: false);
+            }
+
+            const string openingTypeString = " t=\"inlineStr\"><is><t";
+            const string closingString = "</t></is></c>\n";
+            if (sync)
+            {
+                _streamWriter.Append(openingTypeString);
+                _streamWriter.AddSpacePreserveIfNeeded(value);
+                _streamWriter.Append(">");
+                _streamWriter.AppendEscapedXmlText(value, _skipInvalidCharacters);
+                _streamWriter.Append(closingString);
+            }
+            else
+            {
+                await _streamWriter.AppendAsync(openingTypeString);
+                await _streamWriter.AddSpacePreserveIfNeededAsync(value);
+                await _streamWriter.AppendAsync(">");
+                await _streamWriter.AppendEscapedXmlTextAsync(value, _skipInvalidCharacters);
+                await _streamWriter.AppendAsync(closingString);
+            }
+            
             CurrentColumnNumber++;
         }
 
         public void Write(double value, XlsxStyle style)
         {
+            WriteCoreAsync(value, style, sync: true).GetAwaiter().GetResult();
+        }
+
+        public Task WriteAsync(double value, XlsxStyle style)
+        {
+            return WriteCoreAsync(value, style, sync: false);
+        }
+        
+        private async Task WriteCoreAsync(double value, XlsxStyle style, bool sync)
+        {
             EnsureRow();
             // <c r="{0}{1}" s="{2}"><v>{3}</v></c>
-            _streamWriter.Write("<c");
-            WriteCellRef();
-            WriteStyle(style);
-            _streamWriter.Append("><v>").Append(value).Append("</v></c>\n");
+
+            const string openingString = "<c";
+            if (sync)
+            {
+                _streamWriter.Write(openingString);
+                WriteCellRefCoreAsync(sync: true).GetAwaiter().GetResult();
+                WriteStyleCoreAsync(style, sync: true).GetAwaiter().GetResult();
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(openingString);
+                await WriteCellRefCoreAsync(sync: false);
+                await WriteStyleCoreAsync(style, sync: false);
+            }
+
+            const string closingString1 = "><v>";
+            const string closingString2 = "</v></c>\n";
+
+            if (sync)
+            {
+                _streamWriter.Append(closingString1);
+                _streamWriter.Append(value);
+                _streamWriter.Append(closingString2);
+            }
+            else
+            {
+                await _streamWriter.AppendAsync(closingString1);
+                await _streamWriter.AppendAsync(value);
+                await _streamWriter.AppendAsync(closingString2);
+            }
+
             CurrentColumnNumber++;
         }
 
         public void Write(decimal value, XlsxStyle style)
         {
+            WriteCoreAsync(value, style, sync: true).GetAwaiter().GetResult();
+        }
+
+        public Task WriteAsync(decimal value, XlsxStyle style)
+        {
+            return WriteCoreAsync(value, style, sync: false);
+        }
+        
+        private async Task WriteCoreAsync(decimal value, XlsxStyle style, bool sync)
+        {
             EnsureRow();
             // <c r="{0}{1}" s="{2}"><v>{3}</v></c>
-            _streamWriter.Write("<c");
-            WriteCellRef();
-            WriteStyle(style);
-            _streamWriter.Append("><v>").Append(value).Append("</v></c>\n");
+            
+            const string openingString = "<c";
+            if (sync)
+            {
+                _streamWriter.Write(openingString);
+                WriteCellRefCoreAsync(sync: true).GetAwaiter().GetResult();
+                WriteStyleCoreAsync(style, sync: true).GetAwaiter().GetResult();
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(openingString);
+                await WriteCellRefCoreAsync(sync: false);
+                await WriteStyleCoreAsync(style, sync: false);
+            }
+
+            const string closingString1 = "><v>";
+            const string closingString2 = "</v></c>\n";
+
+            if (sync)
+            {
+                _streamWriter.Append(closingString1);
+                _streamWriter.Append(value);
+                _streamWriter.Append(closingString2);
+            }
+            else
+            {
+                await _streamWriter.AppendAsync(closingString1);
+                await _streamWriter.AppendAsync(value);
+                await _streamWriter.AppendAsync(closingString2);
+            }
+            
             CurrentColumnNumber++;
         }
 
         public void Write(int value, XlsxStyle style)
         {
+            WriteCoreAsync(value, style, sync: true).GetAwaiter().GetResult();
+        }
+
+        public Task WriteAsync(int value, XlsxStyle style)
+        {
+            return WriteCoreAsync(value, style, sync: false);
+        }
+
+        private async Task WriteCoreAsync(int value, XlsxStyle style, bool sync)
+        {
             EnsureRow();
             // <c r="{0}{1}" s="{2}"><v>{3}</v></c>
-            _streamWriter.Write("<c");
-            WriteCellRef();
-            WriteStyle(style);
-            _streamWriter.Append("><v>").Append(value).Append("</v></c>\n");
+            const string openingString = "<c";
+            if (sync)
+            {
+                _streamWriter.Write(openingString);
+                WriteCellRefCoreAsync(sync: true).GetAwaiter().GetResult();
+                WriteStyleCoreAsync(style, sync: true).GetAwaiter().GetResult();
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(openingString);
+                await WriteCellRefCoreAsync(sync: false);
+                await WriteStyleCoreAsync(style, sync: false);
+            }
+
+            const string closingString1 = "><v>";
+            const string closingString2 = "</v></c>\n";
+
+            if (sync)
+            {
+                _streamWriter.Append(closingString1);
+                _streamWriter.Append(value);
+                _streamWriter.Append(closingString2);
+            }
+            else
+            {
+                await _streamWriter.AppendAsync(closingString1);
+                await _streamWriter.AppendAsync(value);
+                await _streamWriter.AppendAsync(closingString2);
+            }
+
             CurrentColumnNumber++;
         }
 
         public void Write(bool value, XlsxStyle style)
         {
+            WriteCoreAsync(value, style, sync: true).GetAwaiter().GetResult();
+        }
+
+        public Task WriteAsync(bool value, XlsxStyle style)
+        {
+            return WriteCoreAsync(value, style, sync: false);
+        }
+
+        private async Task WriteCoreAsync(bool value, XlsxStyle style, bool sync)
+        {
             EnsureRow();
             // <c r="{0}{1}" s="{2}" t="b"><v>{3}</v></c>
-            _streamWriter.Write("<c");
-            WriteCellRef();
-            WriteStyle(style);
-            _streamWriter
-                .Append(" t=\"b\"><v>")
-                .Append(Util.BoolToInt(value))
-                .Append("</v></c>\n");
+            
+            const string openingString = "<c";
+            if (sync)
+            {
+                _streamWriter.Write(openingString);
+                WriteCellRefCoreAsync(sync: true).GetAwaiter().GetResult();
+                WriteStyleCoreAsync(style, sync: true).GetAwaiter().GetResult();
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(openingString);
+                await WriteCellRefCoreAsync(sync: false);
+                await WriteStyleCoreAsync(style, sync: false);
+            }
+
+            const string closingString1 = " t=\"b\"><v>";
+            const string closingString2 = "</v></c>\n";
+
+            if (sync)
+            {
+                _streamWriter.Append(closingString1);
+                _streamWriter.Append(Util.BoolToInt(value));
+                _streamWriter.Append(closingString2);
+            }
+            else
+            {
+                await _streamWriter.AppendAsync(closingString1);
+                await _streamWriter.AppendAsync(Util.BoolToInt(value));
+                await _streamWriter.AppendAsync(closingString2);
+            }
+
             CurrentColumnNumber++;
         }
 
         public void WriteFormula(string formula, XlsxStyle style, IConvertible result)
         {
+            WriteFormulaCoreAsync(formula, style, result, sync: true).GetAwaiter().GetResult();
+        }
+
+        public Task WriteFormulaAsync(string formula, XlsxStyle style, IConvertible result)
+        {
+            return WriteFormulaCoreAsync(formula, style, result, sync: false);
+        }
+        
+        private async Task WriteFormulaCoreAsync(
+            string formula, XlsxStyle style, IConvertible result, bool sync)
+        {
             // <c r="{0}{1}" s="{2}" t="str"><f>{3}</f><v>{4}</v></c>
             EnsureRow();
-            _streamWriter.Write("<c");
-            WriteCellRef();
-            WriteStyle(style);
-            _streamWriter.Append(" t=\"str\"><f>")
-                .AppendEscapedXmlText(formula, _skipInvalidCharacters)
-                .Append("</f>");
+            
+            const string openingString = "<c";
+
+            if (sync)
+            {
+                _streamWriter.Write("<c");
+                WriteCellRefCoreAsync(sync: true).GetAwaiter().GetResult();
+                WriteStyleCoreAsync(style, sync: true).GetAwaiter().GetResult();
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(openingString);
+                await WriteCellRefCoreAsync(sync: false);
+                await WriteStyleCoreAsync(style, sync: false);
+            }
+
+            const string formulaOpeningString = " t=\"str\"><f>";
+            const string formulaClosingString = "</f>";
+
+            if (sync)
+            {
+                _streamWriter.Append(formulaOpeningString);
+                _streamWriter.AppendEscapedXmlText(formula, _skipInvalidCharacters);
+                _streamWriter.Append(formulaClosingString);
+            }
+            else
+            {
+                await _streamWriter.AppendAsync(formulaOpeningString);
+                await _streamWriter.AppendEscapedXmlTextAsync(formula, _skipInvalidCharacters);
+                await _streamWriter.AppendAsync(formulaClosingString);
+            }
+        
             if (result != null)
-                _streamWriter
-                    .Append("<v>")
-                    .AppendEscapedXmlText(result.ToString(CultureInfo.InvariantCulture), _skipInvalidCharacters)
-                    .Append("</v>");
-            _streamWriter.Write("</c>\n");
+            {
+                const string resultOpeningString = "<v>";
+                const string resultClosingString = "</v>";
+
+                if (sync)
+                {
+                    _streamWriter.Append(resultOpeningString);
+                    _streamWriter.AppendEscapedXmlText(result.ToString(CultureInfo.InvariantCulture), _skipInvalidCharacters);
+                    _streamWriter.Append(resultClosingString);
+                }
+                else
+                {
+                    await _streamWriter.AppendAsync(resultOpeningString);
+                    await _streamWriter.AppendEscapedXmlTextAsync(result.ToString(CultureInfo.InvariantCulture), _skipInvalidCharacters);
+                    await _streamWriter.AppendAsync(resultClosingString);
+                }
+            }
+
+            const string closingString = "</c>\n";
+            if (sync)
+            {
+                _streamWriter.Write(closingString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(closingString);
+            }
+            
             CurrentColumnNumber++;
         }
 
         public void WriteSharedString(string value, XlsxStyle style)
         {
+            WriteSharedStringCoreAsync(value, style, sync: true).GetAwaiter().GetResult();
+        }
+
+        public Task WriteSharedStringTask(string value, XlsxStyle style)
+        {
+            return WriteSharedStringCoreAsync(value, style, sync: false);
+        }
+        
+        private async Task WriteSharedStringCoreAsync(
+            string value, XlsxStyle style, bool sync)
+        {
             EnsureRow();
             // <c r="{0}{1}" s="{2}" t="s"><v>{3}</v></c>
-            _streamWriter.Write("<c");
-            WriteCellRef();
-            WriteStyle(style);
-            _streamWriter
-                .Append(" t=\"s\"><v>")
-                .Append(_sharedStringTable.ResolveStringId(value))
-                .Append("</v></c>\n");
+            
+            const string openingString = "<c";
+
+            if (sync)
+            {
+                _streamWriter.Write(openingString);
+                WriteCellRefCoreAsync(sync: true).GetAwaiter().GetResult();
+                WriteStyleCoreAsync(style, sync: true).GetAwaiter().GetResult();
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(openingString);
+                await WriteCellRefCoreAsync(sync: false);
+                await WriteStyleCoreAsync(style, sync: false);
+            }
+
+            const string sharedStringOpeningString = " t=\"s\"><v>";
+            const string sharedStringClosingString = "</v></c>\n";
+            if (sync)
+            {
+                _streamWriter.Append(sharedStringOpeningString);
+                _streamWriter.Append(_sharedStringTable.ResolveStringId(value));
+                _streamWriter.Append(sharedStringClosingString);
+            }
+            else
+            {
+                await _streamWriter.AppendAsync(sharedStringOpeningString);
+                await _streamWriter.AppendAsync(_sharedStringTable.ResolveStringId(value));
+                await _streamWriter.AppendAsync(sharedStringClosingString);
+
+            }
+
             CurrentColumnNumber++;
         }
 
@@ -341,34 +861,79 @@ namespace LargeXlsx
             _headerFooter = headerFooter;
         }
 
-        private void WriteCellRef()
+        private async Task WriteCellRefCoreAsync(bool sync)
         {
             if (_requireCellReferences || _needsRef)
             {
-                _streamWriter.Write(" r=\"");
-                _streamWriter.Write(Util.GetColumnName(CurrentColumnNumber));
-                WriteCurrentRowNumber();
-                _streamWriter.Write("\"");
+                const string openingString = " r=\"";
+                const string closingString = "\"";
+                var columnName = Util.GetColumnName(CurrentColumnNumber);
+                if (sync)
+                {
+                    _streamWriter.Write(openingString);
+                    _streamWriter.Write(columnName);
+                    WriteCurrentRowNumberCoreAsync(sync: true).GetAwaiter().GetResult();
+                    _streamWriter.Write(closingString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(" r=\"");
+                    await _streamWriter.WriteAsync(columnName);
+                    await WriteCurrentRowNumberCoreAsync(sync: false);
+                    await _streamWriter.WriteAsync(closingString);
+                }
+
                 _needsRef = false;
             }
         }
 
-        private void WriteCurrentRowNumber()
+        private async Task WriteCurrentRowNumberCoreAsync(bool sync)
         {
             if (_stringedCurrentRowNumber == null)
                 _stringedCurrentRowNumber = CurrentRowNumber.ToString();
-            _streamWriter.Write(_stringedCurrentRowNumber);
+
+            if (sync)
+            {
+                _streamWriter.Write(_stringedCurrentRowNumber);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(_stringedCurrentRowNumber);
+            }
         }
 
-        private void WriteStyle(int styleId)
+        private async Task WriteStyleCoreAsync(int styleId, bool sync)
         {
             if (styleId != 0)
-                _streamWriter.Append(" s=\"").Append(styleId).Append("\"");
+            {
+                const string openingString = " s=\"";
+                const string closingString = "\"";
+
+                if (sync)
+                {
+                    _streamWriter.Append(openingString).Append(styleId).Append(closingString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(openingString);
+                    await _streamWriter.WriteAsync(styleId.ToString());
+                    await _streamWriter.WriteAsync(closingString);
+                }
+            }
         }
 
-        private void WriteStyle(XlsxStyle style)
+        private async Task WriteStyleCoreAsync(XlsxStyle style, bool sync)
         {
-            WriteStyle(_stylesheet.ResolveStyleId(style));
+            var id = _stylesheet.ResolveStyleId(style);
+
+            if (sync)
+            {
+                WriteStyleCoreAsync(id, sync: true).GetAwaiter().GetResult();
+            }
+            else
+            {
+                await WriteStyleCoreAsync(id, sync: false);
+            }
         }
 
         private void EnsureRow()
@@ -377,39 +942,79 @@ namespace LargeXlsx
                 throw new InvalidOperationException($"{nameof(BeginRow)} not called");
         }
 
-        private void CloseLastRow()
+        private async Task CloseLastRowCoreAsync(bool sync)
         {
             if (CurrentColumnNumber > 0)
             {
-                _streamWriter.Write("</row>\n");
+                const string closingString = "</row>\n";
+                if (sync)
+                {
+                    _streamWriter.Write(closingString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(closingString);
+                }
+
                 CurrentColumnNumber = 0;
             }
         }
 
-        private void FreezePanes(int fromRow, int fromColumn)
+        private async Task FreezePanesCoreAsync(int fromRow, int fromColumn, bool sync)
         {
             var topLeftCell = $"{Util.GetColumnName(fromColumn + 1)}{fromRow + 1}";
             if (fromRow > 0 && fromColumn > 0)
             {
-                _streamWriter.Write("<pane xSplit=\"{0}\" ySplit=\"{1}\" topLeftCell=\"{2}\" activePane=\"bottomRight\" state=\"frozen\"/>"
-                                        + "<selection pane=\"bottomRight\" activeCell=\"{2}\" sqref=\"{2}\"/>\n",
+                var s = string.Format(
+                    "<pane xSplit=\"{0}\" ySplit=\"{1}\" topLeftCell=\"{2}\" activePane=\"bottomRight\" state=\"frozen\"/>" +
+                    "<selection pane=\"bottomRight\" activeCell=\"{2}\" sqref=\"{2}\"/>\n",
                     fromColumn, fromRow, topLeftCell);
+
+                if (sync)
+                {
+                    _streamWriter.Write(s);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(s);
+                }
             }
-            else if (fromRow > 0)
+
+            if (fromRow > 0)
             {
-                _streamWriter.Write("<pane ySplit=\"{0}\" topLeftCell=\"{1}\" activePane=\"bottomLeft\" state=\"frozen\"/>"
-                                    + "<selection pane=\"bottomLeft\" activeCell=\"{1}\" sqref=\"{1}\"/>\n",
+                var s = string.Format(
+                    "<pane ySplit=\"{0}\" topLeftCell=\"{1}\" activePane=\"bottomLeft\" state=\"frozen\"/>" +
+                    "<selection pane=\"bottomLeft\" activeCell=\"{1}\" sqref=\"{1}\"/>\n",
                     fromRow, topLeftCell);
+
+                if (sync)
+                {
+                    _streamWriter.Write(s);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(s);
+                }
             }
-            else if (fromColumn > 0)
+            if (fromColumn > 0)
             {
-                _streamWriter.Write("<pane xSplit=\"{0}\" topLeftCell=\"{1}\" activePane=\"topRight\" state=\"frozen\"/>"
-                                    + "<selection pane=\"topRight\" activeCell=\"{1}\" sqref=\"{1}\"/>\n",
+                var s = string.Format(
+                    "<pane xSplit=\"{0}\" topLeftCell=\"{1}\" activePane=\"topRight\" state=\"frozen\"/>" +
+                    "<selection pane=\"topRight\" activeCell=\"{1}\" sqref=\"{1}\"/>\n",
                     fromColumn, topLeftCell);
+
+                if (sync)
+                {
+                    _streamWriter.Write(s);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(s);
+                }
             }
         }
 
-        private void WriteColumns(IEnumerable<XlsxColumn> columns)
+        private async Task WriteColumnsCoreAsync(IEnumerable<XlsxColumn> columns, bool sync)
         {
             var columnIndex = 1;
             var colsWritten = false;
@@ -419,146 +1024,862 @@ namespace LargeXlsx
                 {
                     if (!colsWritten)
                     {
-                        _streamWriter.Write("<cols>");
+                        const string openingCols = "<cols>";
+                        if (sync)
+                        {
+                            _streamWriter.Write(openingCols);
+                        }
+                        else
+                        {
+                            await _streamWriter.WriteAsync(openingCols);
+                        }
                         colsWritten = true;
                     }
-                    _streamWriter.Write("<col min=\"{0}\" max=\"{1}\"", columnIndex, columnIndex + column.Count - 1);
-                    if (column.Width.HasValue) _streamWriter.Write(" width=\"{0}\"", column.Width.Value);
-                    if (column.Hidden) _streamWriter.Write(" hidden=\"1\"");
-                    if (column.Width.HasValue) _streamWriter.Write(" customWidth=\"1\"");
-                    if (column.Style != null) _streamWriter.Write(" style=\"{0}\"", _stylesheet.ResolveStyleId(column.Style));
-                    _streamWriter.Write("/>\n");
+
+                    var openingCol = $"<col min=\"{columnIndex}\" max=\"{columnIndex + column.Count - 1}\"";
+                    if (sync)
+                    {
+                        _streamWriter.Write(openingCol);
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(openingCol);
+                    }
+
+                    if (column.Width.HasValue)
+                    {
+                        var widthString = $" width=\"{column.Width.Value}\"";
+                        if (sync)
+                        {
+                            _streamWriter.Write(widthString);
+                        }
+                        else
+                        {
+                            await _streamWriter.WriteAsync(widthString);
+                        }
+                    }
+
+                    if (column.Hidden)
+                    {
+                        const string hiddenString = " hidden=\"1\"";
+                        if (sync)
+                        {
+                            _streamWriter.Write(hiddenString);
+                        }
+                        else
+                        {
+                            await _streamWriter.WriteAsync(hiddenString);
+                        }
+                    }
+
+                    if (column.Width.HasValue)
+                    {
+                        const string customWidthString = " customWidth=\"1\"";
+                        if (sync)
+                        {
+                            _streamWriter.Write(customWidthString);
+                        }
+                        else
+                        {
+                            await _streamWriter.WriteAsync(customWidthString);
+                        }
+                    }
+
+                    if (column.Style != null)
+                    {
+                        var styleString = $" style=\"{_stylesheet.ResolveStyleId(column.Style)}\"";
+                        if (sync)
+                        {
+                            _streamWriter.Write(styleString);
+                        }
+                        else
+                        {
+                            await _streamWriter.WriteAsync(styleString);
+                        }
+                    }
+
+                    const string columnClosingString = "/>\n";
+                    if (sync)
+                    {
+                        _streamWriter.Write(columnClosingString);
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(columnClosingString);
+                    }
                 }
                 columnIndex += column.Count;
             }
+
             if (colsWritten)
-                _streamWriter.Write("</cols>\n");
+            {
+                const string colsClosingString = "</cols>\n";
+                if (sync)
+                {
+                    _streamWriter.Write(colsClosingString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(colsClosingString);
+                }
+            }
         }
 
-        private void WriteAutoFilter()
+        private async Task WriteAutoFilterCoreAsync(bool sync)
         {
             if (_autoFilterRef != null)
-                _streamWriter.Write("<autoFilter ref=\"{0}\"/>\n", _autoFilterRef);
+            {
+                var s = $"<autoFilter ref=\"{_autoFilterRef}\"/>\n";
+
+                if (sync)
+                {
+                    _streamWriter.Write(s);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(s);
+                }
+            }
         }
 
-        private void WriteMergedCells()
+        private async Task WriteMergedCellsCoreAsync(bool sync)
         {
-            if (!_mergedCellRefs.Any())
+            if (_mergedCellRefs.Count == 0)
                 return;
-            _streamWriter.Write("<mergeCells count=\"{0}\">\n", _mergedCellRefs.Count);
+
+            var s = $"<mergeCells count=\"{_mergedCellRefs.Count}\">\n";
+            
+            if (sync)
+            {
+                _streamWriter.Write(s);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(s);
+            }
+
             foreach (var mergedCell in _mergedCellRefs)
-                _streamWriter.Write("<mergeCell ref=\"{0}\"/>\n", mergedCell);
-            _streamWriter.Write("</mergeCells>\n");
+            {
+                var mergeCellString = $"<mergeCell ref=\"{mergedCell}\"/>\n";
+                if (sync)
+                {
+                    _streamWriter.Write(mergeCellString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(mergeCellString);
+                }
+            }
+
+            const string closingString = "</mergeCells>\n";
+            if (sync)
+            {
+                _streamWriter.Write(closingString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(closingString);
+            }
         }
 
-        private void WriteDataValidations()
+        private async Task WriteDataValidationsCoreAsync(bool sync)
         {
-            if (!_cellRefsByDataValidation.Any())
+            if (_cellRefsByDataValidation.Count == 0)
                 return;
-            _streamWriter.Write("<dataValidations count=\"{0}\">\n", _cellRefsByDataValidation.Count);
+
+            var openingString = $"<dataValidations count=\"{_cellRefsByDataValidation.Count}\">\n";
+            if (sync)
+            {
+                _streamWriter.Write(openingString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(openingString);
+            }
+            
             foreach (var kvp in _cellRefsByDataValidation)
             {
-                _streamWriter.Write("<dataValidation sqref=\"{0}\" allowBlank=\"{1}\"",
-                    string.Join(" ", kvp.Value.Distinct()), Util.BoolToInt(kvp.Key.AllowBlank));
+                var dataValidationString =
+                    $"<dataValidation sqref=\"{string.Join(" ", kvp.Value.Distinct())}\" allowBlank=\"{Util.BoolToInt(kvp.Key.AllowBlank)}\"";
+                if (sync)
+                {
+                    _streamWriter.Write(dataValidationString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(dataValidationString);
+                }
+                
                 if (kvp.Key.Error != null)
-                    _streamWriter.Append(" error=\"").AppendEscapedXmlAttribute(kvp.Key.Error, _skipInvalidCharacters).Write('"');
-                if (kvp.Key.ErrorStyleValue.HasValue)
-                    _streamWriter.Write(" errorStyle=\"{0}\"", Util.EnumToAttributeValue(kvp.Key.ErrorStyleValue));
-                if (kvp.Key.ErrorTitle != null)
-                    _streamWriter.Append(" errorTitle=\"").AppendEscapedXmlAttribute(kvp.Key.ErrorTitle, _skipInvalidCharacters).Write('"');
-                if (kvp.Key.OperatorValue.HasValue)
-                    _streamWriter.Write(" operator=\"{0}\"", Util.EnumToAttributeValue(kvp.Key.OperatorValue));
-                if (kvp.Key.Prompt != null)
-                    _streamWriter.Append(" prompt=\"").AppendEscapedXmlAttribute(kvp.Key.Prompt, _skipInvalidCharacters).Write('"');
-                if (kvp.Key.PromptTitle != null)
-                    _streamWriter.Append(" promptTitle=\"").AppendEscapedXmlAttribute(kvp.Key.PromptTitle, _skipInvalidCharacters).Write('"');
-                if (kvp.Key.ShowDropDown)
-                    _streamWriter.Write(" showDropDown=\"1\"");
-                if (kvp.Key.ShowErrorMessage)
-                    _streamWriter.Write(" showErrorMessage=\"1\"");
-                if (kvp.Key.ShowInputMessage)
-                    _streamWriter.Write(" showInputMessage=\"1\"");
-                if (kvp.Key.ValidationTypeValue.HasValue)
-                    _streamWriter.Write(" type=\"{0}\"", Util.EnumToAttributeValue(kvp.Key.ValidationTypeValue));
-                _streamWriter.Write(">");
-                if (kvp.Key.Formula1 != null)
-                    _streamWriter.Append("<formula1>").AppendEscapedXmlText(kvp.Key.Formula1, _skipInvalidCharacters).Append("</formula1>");
-                if (kvp.Key.Formula2 != null)
-                    _streamWriter.Append("<formula2>").AppendEscapedXmlText(kvp.Key.Formula2, _skipInvalidCharacters).Append("</formula2>");
-                _streamWriter.Write("</dataValidation>\n");
-            }
-            _streamWriter.Write("</dataValidations>\n");
-        }
+                {
+                    const string errorOpeningString = " error=\"";
+                                                      
+                    if (sync)
+                    {
+                        _streamWriter.Append(errorOpeningString);
+                        _streamWriter.AppendEscapedXmlAttribute(kvp.Key.Error, _skipInvalidCharacters);
+                        _streamWriter.Write('"');
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(errorOpeningString);
+                        await _streamWriter.AppendEscapedXmlAttributeAsync(kvp.Key.Error, _skipInvalidCharacters);
+                        await _streamWriter.WriteAsync('"');
+                    }
+                }
 
-        private void WriteSheetProtection()
+                if (kvp.Key.ErrorStyleValue.HasValue)
+                {
+                    var styleString = $" errorStyle=\"{Util.EnumToAttributeValue(kvp.Key.ErrorStyleValue)}\"";
+                    if (sync)
+                    {
+                        _streamWriter.Write(styleString);
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(styleString);
+                    }
+                }
+
+                if (kvp.Key.ErrorTitle != null)
+                {
+                    const string errorTitleString = " errorTitle=\"";
+                    if (sync)
+                    {
+                        _streamWriter.Append(errorTitleString);
+                        _streamWriter.AppendEscapedXmlAttribute(kvp.Key.ErrorTitle, _skipInvalidCharacters);
+                        _streamWriter.Write('"');
+                    }
+                    else
+                    {
+                        await _streamWriter.AppendAsync(errorTitleString);
+                        await _streamWriter.AppendEscapedXmlAttributeAsync(kvp.Key.ErrorTitle, _skipInvalidCharacters);
+                        await _streamWriter.WriteAsync('"');
+                    }
+                }
+
+                if (kvp.Key.OperatorValue.HasValue)
+                {
+                    var operatorString = $" operator=\"{Util.EnumToAttributeValue(kvp.Key.OperatorValue)}\"";
+                    if (sync)
+                    {
+                        _streamWriter.Write(operatorString);
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(operatorString);
+                    }
+                }
+
+                if (kvp.Key.Prompt != null)
+                {
+                    const string promptString = " prompt=\"";
+                    if (sync)
+                    {
+                        _streamWriter.Append(promptString);
+                        _streamWriter.AppendEscapedXmlAttribute(kvp.Key.Prompt, _skipInvalidCharacters);
+                        _streamWriter.Write('"');
+                    }
+                    else
+                    {
+                        await _streamWriter.AppendAsync(promptString);
+                        await _streamWriter.AppendEscapedXmlAttributeAsync(kvp.Key.Prompt, _skipInvalidCharacters);
+                        await _streamWriter.WriteAsync('"');
+                    }
+                }
+
+                if (kvp.Key.PromptTitle != null)
+                {
+                    const string promptTitleString = " promptTitle=\"";
+
+                    if (sync)
+                    {
+                        _streamWriter.Append(promptTitleString);
+                        _streamWriter.AppendEscapedXmlAttribute(kvp.Key.PromptTitle, _skipInvalidCharacters);
+                        _streamWriter.Write('"');
+                    }
+                    else
+                    {
+                        await _streamWriter.AppendAsync(promptTitleString);
+                        await _streamWriter.AppendEscapedXmlAttributeAsync(kvp.Key.PromptTitle, _skipInvalidCharacters);
+                        await _streamWriter.WriteAsync('"');
+                    }
+                }
+
+                if (kvp.Key.ShowDropDown)
+                {
+                    const string dropDownString = " showDropDown=\"1\"";
+                    if (sync)
+                    {
+                        _streamWriter.Write(dropDownString);
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(dropDownString);
+                    }
+                }
+
+                if (kvp.Key.ShowErrorMessage)
+                {
+                    const string showErrorString = " showErrorMessage=\"1\"";
+                    if (sync)
+                    {
+                        _streamWriter.Write(showErrorString);
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(showErrorString);
+                    }
+                }
+
+                if (kvp.Key.ShowInputMessage)
+                {
+                    const string showInputString = " showInputMessage=\"1\"";
+                    if (sync)
+                    {
+                        _streamWriter.Write(showInputString);
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(showInputString);
+                    }
+                }
+
+                if (kvp.Key.ValidationTypeValue.HasValue)
+                {
+                    var validationTypeValueStrong =
+                        $" type=\"{Util.EnumToAttributeValue(kvp.Key.ValidationTypeValue)}\"";
+                    if (sync)
+                    {
+                        _streamWriter.Write(validationTypeValueStrong);
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(validationTypeValueStrong);
+                    }
+                }
+
+                if (sync)
+                {
+                    _streamWriter.Write(">");
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(">");
+                }
+
+                if (kvp.Key.Formula1 != null)
+                {
+                    const string formula1OpeningString = "<formula1>";
+                    const string formula1ClosingString = "</formula1>";
+                    if (sync)
+                    {
+                        _streamWriter.Append(formula1OpeningString);
+                        _streamWriter.AppendEscapedXmlText(kvp.Key.Formula1, _skipInvalidCharacters);
+                        _streamWriter.Append(formula1ClosingString);
+                    }
+                    else
+                    {
+                        await _streamWriter.AppendAsync(formula1OpeningString);
+                        await _streamWriter.AppendEscapedXmlTextAsync(kvp.Key.Formula1, _skipInvalidCharacters);
+                        await _streamWriter.AppendAsync(formula1ClosingString);
+                    }
+                }
+
+                if (kvp.Key.Formula2 != null)
+                {
+                    const string formula2OpeningString = "<formula2>";
+                    const string formula2ClosingString = "</formula2>";
+                    if (sync)
+                    {
+                        _streamWriter.Append(formula2OpeningString);
+                        _streamWriter.AppendEscapedXmlText(kvp.Key.Formula2, _skipInvalidCharacters);
+                        _streamWriter.Append(formula2ClosingString);
+                    }
+                    else
+                    {
+                        await _streamWriter.AppendAsync(formula2OpeningString);
+                        await _streamWriter.AppendEscapedXmlTextAsync(kvp.Key.Formula2, _skipInvalidCharacters);
+                        await _streamWriter.AppendAsync(formula2ClosingString);
+                    }
+                }
+
+                const string dataValidationClosingString = "</dataValidation>\n";
+                if (sync)
+                {
+                    _streamWriter.Write(dataValidationClosingString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(dataValidationClosingString);
+                }
+            }
+
+            const string dataValidationsClosingString = "</dataValidations>\n";
+            if (sync)
+            {
+                _streamWriter.Write(dataValidationsClosingString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(dataValidationsClosingString);
+            }
+        }
+        
+        private async Task WriteSheetProtectionCoreAsync(bool sync)
         {
             if (_sheetProtection == null)
                 return;
+            
             const int spinCount = 100000;
             var saltValue = Guid.NewGuid().ToByteArray();
             var hash = Util.ComputePasswordHash(_sheetProtection.Password, saltValue, spinCount);
-            _streamWriter.Write("<sheetProtection algorithmName=\"SHA-512\" hashValue=\"{0}\" saltValue=\"{1}\" spinCount=\"{2}\"", Convert.ToBase64String(hash), Convert.ToBase64String(saltValue), spinCount);
-            if (_sheetProtection.Sheet) _streamWriter.Write(" sheet=\"1\"");
-            if (_sheetProtection.Objects) _streamWriter.Write(" objects=\"1\"");
-            if (_sheetProtection.Scenarios) _streamWriter.Write(" scenarios=\"1\"");
-            if (!_sheetProtection.FormatCells) _streamWriter.Write(" formatCells=\"0\"");
-            if (!_sheetProtection.FormatColumns) _streamWriter.Write(" formatColumns=\"0\"");
-            if (!_sheetProtection.FormatRows) _streamWriter.Write(" formatRows=\"0\"");
-            if (!_sheetProtection.InsertColumns) _streamWriter.Write(" insertColumns=\"0\"");
-            if (!_sheetProtection.InsertRows) _streamWriter.Write(" insertRows=\"0\"");
-            if (!_sheetProtection.InsertHyperlinks) _streamWriter.Write(" insertHyperlinks=\"0\"");
-            if (!_sheetProtection.DeleteColumns) _streamWriter.Write(" deleteColumns=\"0\"");
-            if (!_sheetProtection.DeleteRows) _streamWriter.Write(" deleteRows=\"0\"");
-            if (_sheetProtection.SelectLockedCells) _streamWriter.Write(" selectLockedCells=\"1\"");
-            if (!_sheetProtection.Sort) _streamWriter.Write(" sort=\"0\"");
-            if (!_sheetProtection.AutoFilter) _streamWriter.Write(" autoFilter=\"0\"");
-            if (!_sheetProtection.PivotTables) _streamWriter.Write(" pivotTables=\"0\"");
-            if (_sheetProtection.SelectUnlockedCells) _streamWriter.Write(" selectUnlockedCells=\"1\"");
-            _streamWriter.Write("/>\n");
+
+            var openingString =
+                $"<sheetProtection algorithmName=\"SHA-512\" hashValue=\"{Convert.ToBase64String(hash)}\" saltValue=\"{Convert.ToBase64String(saltValue)}\" spinCount=\"{spinCount}\"";
+            
+            if (sync)
+            {
+                _streamWriter.Write(openingString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(openingString);
+            }
+
+            if (_sheetProtection.Sheet)
+            {
+                const string sheetProtectionString = " sheet=\"1\"";
+                if (sync)
+                {
+                    _streamWriter.Write(sheetProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(sheetProtectionString);
+                }
+            }
+
+            if (_sheetProtection.Objects)
+            {
+                const string objectsProtectionString = " objects=\"1\"";
+                if (sync)
+                {
+                    _streamWriter.Write(objectsProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(objectsProtectionString);
+                }
+            }
+
+            if (_sheetProtection.Scenarios)
+            {
+                const string scenariosProtectionString = " scenarios=\"1\"";
+                if (sync)
+                {
+                    _streamWriter.Write(scenariosProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(scenariosProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.FormatCells)
+            {
+                const string formatCellsProtectionString = " formatCells=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(formatCellsProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(formatCellsProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.FormatColumns)
+            {
+                const string formatColumnsProtectionString = " formatColumns=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(formatColumnsProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(formatColumnsProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.FormatRows)
+            {
+                const string formatRowsProtectionString = " formatRows=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(formatRowsProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(formatRowsProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.InsertColumns)
+            {
+                const string insertColumnsProtectionString = " insertColumns=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(insertColumnsProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(insertColumnsProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.InsertRows)
+            {
+                const string insertRowsProtectionString = " insertRows=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(insertRowsProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(insertRowsProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.InsertHyperlinks)
+            {
+                const string insertHyperlinksProtectionString = " insertHyperlinks=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(insertHyperlinksProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(insertHyperlinksProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.DeleteColumns)
+            {
+                const string deleteColumnsProtectionString = " deleteColumns=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(deleteColumnsProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(deleteColumnsProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.DeleteRows)
+            {
+                const string deleteRowsProtectionString = " deleteRows=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(deleteRowsProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(deleteRowsProtectionString);
+                }
+            }
+
+            if (_sheetProtection.SelectLockedCells)
+            {
+                const string selectLockedCellsProtectionString = " selectLockedCells=\"1\"";
+                if (sync)
+                {
+                    _streamWriter.Write(selectLockedCellsProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(selectLockedCellsProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.Sort)
+            {
+                const string sortProtectionString = " sort=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(sortProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(sortProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.AutoFilter)
+            {
+                const string autoFilterProtectionString = " autoFilter=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(autoFilterProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(autoFilterProtectionString);
+                }
+            }
+
+            if (!_sheetProtection.PivotTables)
+            {
+                const string pivotTablesProtectionString = " pivotTables=\"0\"";
+                if (sync)
+                {
+                    _streamWriter.Write(pivotTablesProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(pivotTablesProtectionString);
+                }
+            }
+
+            if (_sheetProtection.SelectUnlockedCells)
+            {
+                const string selectUnlockedCellsProtectionString = " selectUnlockedCells=\"1\"";
+                if (sync)
+                {
+                    _streamWriter.Write(selectUnlockedCellsProtectionString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(selectUnlockedCellsProtectionString);
+                }
+            }
+            
+            const string closingString = "/>\n";
+            if (sync)
+            {
+                _streamWriter.Write(closingString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(closingString);
+            }
         }
 
-        private void WriteHeaderFooter()
+        private async Task WriteHeaderFooterCoreAsync(bool sync)
         {
             if (_headerFooter == null)
                 return;
+            
             var differentFirst = _headerFooter.FirstHeader != null || _headerFooter.FirstFooter != null;
             var differentOddEven = _headerFooter.EvenHeader != null || _headerFooter.EvenFooter != null;
-            _streamWriter.Write(
-                "<headerFooter alignWithMargins=\"{0}\" differentFirst=\"{1}\" differentOddEven=\"{2}\" scaleWithDoc=\"{3}\">\n",
-                Util.BoolToInt(_headerFooter.AlignWithMargins),
-                Util.BoolToInt(differentFirst),
-                Util.BoolToInt(differentOddEven),
-                Util.BoolToInt(_headerFooter.ScaleWithDoc));
+            
+            var openingString = $"<headerFooter alignWithMargins=\"{Util.BoolToInt(_headerFooter.AlignWithMargins)}\" differentFirst=\"{Util.BoolToInt(differentFirst)}\" differentOddEven=\"{Util.BoolToInt(differentOddEven)}\" scaleWithDoc=\"{Util.BoolToInt(_headerFooter.ScaleWithDoc)}\">\n";
+
+            if (sync)
+            {
+                _streamWriter.Write(openingString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(openingString);
+            }
+
             if (_headerFooter.OddHeader != null)
-                _streamWriter.Append("<oddHeader>").AppendEscapedXmlText(_headerFooter.OddHeader, _skipInvalidCharacters).Append("</oddHeader>\n");
+            {
+                const string oddHeaderOpeningString = "<oddHeader>";
+                const string oddHeaderClosingString = "</oddHeader>\n";
+                
+                if (sync)
+                {
+                    _streamWriter.Append(oddHeaderOpeningString);
+                    _streamWriter.AppendEscapedXmlText(_headerFooter.OddHeader, _skipInvalidCharacters);
+                    _streamWriter.Append(oddHeaderClosingString);
+                }
+                else
+                {
+                    await _streamWriter.AppendAsync(oddHeaderOpeningString);
+                    await _streamWriter.AppendEscapedXmlTextAsync(_headerFooter.OddHeader, _skipInvalidCharacters);
+                    await _streamWriter.AppendAsync(oddHeaderClosingString);
+                }
+            }
+
             if (_headerFooter.OddFooter != null)
-                _streamWriter.Append("<oddFooter>").AppendEscapedXmlText(_headerFooter.OddFooter, _skipInvalidCharacters).Append("</oddFooter>\n");
+            {
+                const string oddFooterOpeningString = "<oddFooter>";
+                const string oddFooterClosingString = "</oddFooter>\n";
+                
+                if(sync)
+                {
+                    _streamWriter.Append(oddFooterOpeningString);
+                    _streamWriter.AppendEscapedXmlText(_headerFooter.OddFooter, _skipInvalidCharacters);
+                    _streamWriter.Append(oddFooterClosingString);
+                }
+                else
+                {
+                    await _streamWriter.AppendAsync(oddFooterOpeningString);
+                    await _streamWriter.AppendEscapedXmlTextAsync(_headerFooter.OddFooter, _skipInvalidCharacters);
+                    await _streamWriter.AppendAsync(oddFooterClosingString);
+                }
+            }
+
             if (_headerFooter.EvenHeader != null)
-                _streamWriter.Append("<evenHeader>").AppendEscapedXmlText(_headerFooter.EvenHeader, _skipInvalidCharacters).Append("</evenHeader>\n");
+            {
+                const string evenHeaderOpeningString = "<evenHeader>";
+                const string evenHeaderClosingString = "</evenHeader>\n";
+                if (sync)
+                {
+                    _streamWriter.Append(evenHeaderOpeningString);
+                    _streamWriter.AppendEscapedXmlText(_headerFooter.EvenHeader, _skipInvalidCharacters);
+                    _streamWriter.Append(evenHeaderClosingString);
+                }
+                else
+                {
+                    await _streamWriter.AppendAsync(evenHeaderOpeningString);
+                    await _streamWriter.AppendEscapedXmlTextAsync(_headerFooter.EvenHeader, _skipInvalidCharacters);
+                    await _streamWriter.AppendAsync(evenHeaderClosingString);
+                }
+            }
+
             if (_headerFooter.EvenFooter != null)
-                _streamWriter.Append("<evenFooter>").AppendEscapedXmlText(_headerFooter.EvenFooter, _skipInvalidCharacters).Append("</evenFooter>\n");
+            {
+                const string evenFooterOpeningString = "<evenFooter>";
+                const string evenFooterClosingString = "</evenFooter>\n";
+                
+                if(sync)
+                {
+                    _streamWriter.Append(evenFooterOpeningString);
+                    _streamWriter.AppendEscapedXmlText(_headerFooter.EvenFooter, _skipInvalidCharacters);
+                    _streamWriter.Append(evenFooterClosingString);
+                }
+                else
+                {
+                    await _streamWriter.AppendAsync(evenFooterOpeningString);
+                    await _streamWriter.AppendEscapedXmlTextAsync(_headerFooter.EvenFooter, _skipInvalidCharacters);
+                    await _streamWriter.AppendAsync(evenFooterClosingString);
+                }
+            }
+
             if (_headerFooter.FirstHeader != null)
-                _streamWriter.Append("<firstHeader>").AppendEscapedXmlText(_headerFooter.FirstHeader, _skipInvalidCharacters).Append("</firstHeader>\n");
+            {
+                const string firstHeaderOpeningString = "<firstHeader>";
+                const string firstHeaderClosingString = "</firstHeader>\n";
+                if (sync)
+                {
+                    _streamWriter.Append(firstHeaderOpeningString);
+                    _streamWriter.AppendEscapedXmlText(_headerFooter.FirstHeader, _skipInvalidCharacters);
+                    _streamWriter.Append(firstHeaderClosingString);
+                }
+                else
+                {
+                    await _streamWriter.AppendAsync(firstHeaderOpeningString);
+                    await _streamWriter.AppendEscapedXmlTextAsync(_headerFooter.FirstHeader, _skipInvalidCharacters);
+                    await _streamWriter.AppendAsync(firstHeaderClosingString);
+                }
+            }
+
             if (_headerFooter.FirstFooter != null)
-                _streamWriter.Append("<firstFooter>").AppendEscapedXmlText(_headerFooter.FirstFooter, _skipInvalidCharacters).Append("</firstFooter>\n");
-            _streamWriter.Write("</headerFooter>\n");
+            {
+                const string firstFooterOpeningString = "<firstFooter>";
+                const string firstFooterClosingString = "</firstFooter>\n";
+                
+                if(sync)
+                {
+                    _streamWriter.Append(firstFooterOpeningString);
+                    _streamWriter.AppendEscapedXmlText(_headerFooter.FirstFooter, _skipInvalidCharacters);
+                    _streamWriter.Append(firstFooterClosingString);
+                }
+                else
+                {
+                    await _streamWriter.AppendAsync(firstFooterOpeningString);
+                    await _streamWriter.AppendEscapedXmlTextAsync(_headerFooter.FirstFooter, _skipInvalidCharacters);
+                    await _streamWriter.AppendAsync(firstFooterClosingString);
+                }
+            }
+
+            const string closingString = "</headerFooter>\n";
+            if (sync)
+            {
+                _streamWriter.Write(closingString);
+            }
+            else
+            {
+                await _streamWriter.WriteAsync(closingString);
+            }
         }
 
-        private void WritePageBreaks()
+        private async Task WritePageBreaksCoreAsync(bool sync)
         {
             if (_pageBreakRowNumbers.Count > 0)
             {
-                _streamWriter.Write($"<rowBreaks count=\"{_pageBreakRowNumbers.Count}\" manualBreakCount=\"{_pageBreakRowNumbers.Count}\">\n");
+                var rowBreaksOpeningString = $"<rowBreaks count=\"{_pageBreakRowNumbers.Count}\" manualBreakCount=\"{_pageBreakRowNumbers.Count}\">\n";
+                if (sync)
+                {
+                    _streamWriter.Write(rowBreaksOpeningString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(rowBreaksOpeningString);
+                }
+
                 foreach (var i in _pageBreakRowNumbers.OrderBy(r => r))
-                    _streamWriter.Write($"<brk id=\"{i}\" max=\"{Limits.MaxColumnCount}\" man=\"1\"/>\n");
-                _streamWriter.Write("</rowBreaks>\n");
+                {
+                    var s = $"<brk id=\"{i}\" max=\"{Limits.MaxColumnCount}\" man=\"1\"/>\n";
+                    if (sync)
+                    {
+                        _streamWriter.Write(s);
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(s);
+                    }
+                }
+
+                const string closingBreakString = "</rowBreaks>\n";
+                if (sync)
+                {
+                    _streamWriter.Write(closingBreakString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(closingBreakString);
+                }
             }
             if (_pageBreakColumnNumbers.Count > 0)
             {
-                _streamWriter.Write($"<colBreaks count=\"{_pageBreakColumnNumbers.Count}\" manualBreakCount=\"{_pageBreakColumnNumbers.Count}\">\n");
+                var colBreaksOpeningString = $"<colBreaks count=\"{_pageBreakColumnNumbers.Count}\" manualBreakCount=\"{_pageBreakColumnNumbers.Count}\">\n";
+                if (sync)
+                {
+                    _streamWriter.Write(colBreaksOpeningString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(colBreaksOpeningString);
+                }
+
                 foreach (var i in _pageBreakColumnNumbers.OrderBy(c => c))
-                    _streamWriter.Write($"<brk id=\"{i}\" max=\"{Limits.MaxRowCount}\" man=\"1\"/>\n");
-                _streamWriter.Write("</colBreaks>\n");
+                {
+                    var s = $"<brk id=\"{i}\" max=\"{Limits.MaxRowCount}\" man=\"1\"/>\n";
+
+                    if (sync)
+                    {
+                        _streamWriter.Write(s);
+                    }
+                    else
+                    {
+                        await _streamWriter.WriteAsync(s);
+                    }
+                }
+                
+                const string colBreaksClosingString = "</colBreaks>\n";
+                if (sync)
+                {
+                    _streamWriter.Write(colBreaksClosingString);
+                }
+                else
+                {
+                    await _streamWriter.WriteAsync(colBreaksClosingString);
+                }
             }
         }
     }

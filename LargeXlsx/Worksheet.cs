@@ -242,6 +242,11 @@ namespace LargeXlsx
             BeginRowCoreAsync(height, hidden, style, sync: true).GetAwaiter().GetResult();
         }
 
+        public Task BeginRowAsync(double? height, bool hidden, XlsxStyle style)
+        {
+            return BeginRowCoreAsync(height, hidden, style, sync: true);
+        }
+
         private async Task BeginRowCoreAsync(double? height, bool hidden, XlsxStyle style, bool sync)
         {
             if (sync)

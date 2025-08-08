@@ -1,5 +1,8 @@
 ﻿using System.Text;
 
+// provide an initials StringBuilder capacity
+#pragma warning disable U2U1108
+
 namespace LargeXlsx
 {
     public class XlsxHeaderFooterBuilder

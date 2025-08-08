@@ -29,6 +29,12 @@ using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Threading.Tasks;
+
+// disable warning regarding early exists from async fns
+#pragma warning disable U2U1009
+// prefer string interpolation over String.Format
+#pragma warning disable U2U1104
 
 namespace LargeXlsx
 {
@@ -124,12 +130,35 @@ namespace LargeXlsx
             }
         }
 
+        public async Task SaveAsync(ZipArchive zipArchive, CompressionLevel compressionLevel)
+        {
+            var entry = zipArchive.CreateEntry("xl/styles.xml", compressionLevel);
+            using (var streamWriter = new InvariantCultureStreamWriter(entry.Open()))
+            {
+                await streamWriter.WriteLineAsync(
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" 
+                    + "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+                await WriteNumberFormatsAsync(streamWriter);
+                await WriteFontsAsync(streamWriter);
+                await WriteFillsAsync(streamWriter);
+                await WriteBordersAsync(streamWriter);
+                await WriteCellFormatsAsync(streamWriter);
+                await streamWriter.WriteLineAsync("</styleSheet>");
+            }
+        }
+
         private void SetLastUsedStyle(XlsxStyle style, int styleId)
         {
             _lastUsedStyle = style;
             _lastUsedStyleId = styleId;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteNumberFormatsAsync"/>.</remarks>
         private void WriteNumberFormats(StreamWriter streamWriter)
         {
             streamWriter.WriteLine("<numFmts count=\"{0}\">", _numberFormats.Count(nf => nf.Value >= FirstCustomNumberFormatId));
@@ -145,6 +174,32 @@ namespace LargeXlsx
             streamWriter.WriteLine("</numFmts>");
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteNumberFormats"/>.</remarks>
+        private async Task WriteNumberFormatsAsync(StreamWriter streamWriter)
+        {
+            await streamWriter.WriteLineAsync($"<numFmts count=\"{_numberFormats.Count(nf => nf.Value >= FirstCustomNumberFormatId)}\">");
+            foreach (var numberFormat in _numberFormats.Where(nf => nf.Value >= FirstCustomNumberFormatId).OrderBy(nf => nf.Value))
+            {
+                await streamWriter.WriteAsync("<numFmt numFmtId=\"");
+                await streamWriter.WriteAsync(numberFormat.Value);
+                await streamWriter.WriteAsync("\" formatCode=\"");
+                await streamWriter.AppendEscapedXmlAttributeAsync(numberFormat.Key.FormatCode, false);
+                await streamWriter.WriteAsync("\"/>\n");
+            }
+            await streamWriter.WriteLineAsync("</numFmts>");
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteFontsAsync"/>.</remarks>
         private void WriteFonts(StreamWriter streamWriter)
         {
             streamWriter.WriteLine("<fonts count=\"{0}\">", _fonts.Count);
@@ -180,6 +235,52 @@ namespace LargeXlsx
             streamWriter.WriteLine("</fonts>");
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteFonts"/>.</remarks>
+        private async Task WriteFontsAsync(StreamWriter streamWriter)
+        {
+            await streamWriter.WriteLineAsync($"<fonts count=\"{_fonts.Count}\">");
+            foreach (var font in _fonts.OrderBy(f => f.Value))
+            {
+                await streamWriter.WriteAsync("<font><sz val=\"");
+                await streamWriter.WriteAsync(font.Key.Size);
+                await streamWriter.WriteAsync("\"/><color rgb=\"");
+                await streamWriter.WriteAsync(GetColorString(font.Key.Color));
+                await streamWriter.WriteAsync("\"/><name val=\"");
+                await streamWriter.AppendEscapedXmlAttributeAsync(font.Key.Name, false);
+                await streamWriter.WriteAsync("\"/><family val=\"2\"/>");
+                if (font.Key.Bold)
+                    await streamWriter.WriteAsync("<b val=\"true\"/>");
+                if (font.Key.Italic)
+                    await streamWriter.WriteAsync("<i val=\"true\"/>");
+                if (font.Key.Strike)
+                    await streamWriter.WriteAsync("<strike val=\"true\"/>");
+                switch (font.Key.UnderlineType)
+                {
+                    case XlsxFont.Underline.None:
+                        break;
+                    case XlsxFont.Underline.Single:
+                        await streamWriter.WriteAsync("<u/>");
+                        break;
+                    default:
+                        await streamWriter.WriteAsync($"<u val=\"{Util.EnumToAttributeValue(font.Key.UnderlineType)}\"/>");
+                        break;
+                }
+                await streamWriter.WriteAsync("</font>\n");
+            }
+            await streamWriter.WriteLineAsync("</fonts>");
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteFillsAsync"/>.</remarks>
         private void WriteFills(StreamWriter streamWriter)
         {
             streamWriter.WriteLine("<fills count=\"{0}\">", _fills.Count);
@@ -196,6 +297,34 @@ namespace LargeXlsx
             streamWriter.WriteLine("</fills>");
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteFills"/>.</remarks>
+        private async Task WriteFillsAsync(StreamWriter streamWriter)
+        {
+            await streamWriter.WriteLineAsync($"<fills count=\"{_fills.Count}\">");
+            foreach (var fill in _fills.OrderBy(f => f.Value))
+            {
+                await streamWriter.WriteLineAsync(
+                    "<fill>" + 
+                    $"<patternFill patternType=\"{Util.EnumToAttributeValue(fill.Key.PatternType)}\">" + 
+                    $"<fgColor rgb=\"{GetColorString(fill.Key.Color)}\"/>" + 
+                    $"<bgColor rgb=\"{GetColorString(fill.Key.Color)}\"/>" + 
+                    "</patternFill>" + 
+                    "</fill>");
+            }
+            await streamWriter.WriteLineAsync("</fills>");
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteBordersAsync"/>.</remarks>
         private void WriteBorders(StreamWriter streamWriter)
         {
             streamWriter.WriteLine($"<borders count=\"{_borders.Count}\">");
@@ -212,6 +341,37 @@ namespace LargeXlsx
             streamWriter.WriteLine("</borders>");
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteBorders"/>.</remarks>
+        private async Task WriteBordersAsync(StreamWriter streamWriter)
+        {
+            await streamWriter.WriteLineAsync($"<borders count=\"{_borders.Count}\">");
+            foreach (var border in _borders.OrderBy(b => b.Value))
+            {
+                await streamWriter.WriteLineAsync($"<border diagonalDown=\"{Util.BoolToInt(border.Key.DiagonalDown)}\" diagonalUp=\"{Util.BoolToInt(border.Key.DiagonalUp)}\">");
+                await WriteBorderLineAsync(streamWriter, "left", border.Key.Left);
+                await WriteBorderLineAsync(streamWriter, "right", border.Key.Right);
+                await WriteBorderLineAsync(streamWriter, "top", border.Key.Top);
+                await WriteBorderLineAsync(streamWriter, "bottom", border.Key.Bottom);
+                await WriteBorderLineAsync(streamWriter, "diagonal", border.Key.Diagonal);
+                await streamWriter.WriteLineAsync("</border>");
+            }
+            await streamWriter.WriteLineAsync("</borders>");
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <param name="elementName"></param>
+        /// <param name="line"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteBorderLineAsync"/>.</remarks>
+
         private static void WriteBorderLine(StreamWriter streamWriter, string elementName, XlsxBorder.Line line)
         {
             if (line != null)
@@ -227,6 +387,36 @@ namespace LargeXlsx
             }
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <param name="elementName"></param>
+        /// <param name="line"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteBorderLine"/>.</remarks>
+        private static async Task WriteBorderLineAsync(StreamWriter streamWriter, string elementName, XlsxBorder.Line line)
+        {
+            if (line != null)
+            {
+                await streamWriter.WriteAsync($"<{elementName} style=\"{Util.EnumToAttributeValue(line.Style)}\">");
+                if (line.Color != Color.Transparent)
+                    await streamWriter.WriteAsync($"<color rgb=\"{GetColorString(line.Color)}\"/>");
+                await streamWriter.WriteLineAsync($"</{elementName}>");
+            }
+            else
+            {
+                await streamWriter.WriteLineAsync($"<{elementName}/>");
+            }
+        }
+
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteCellFormatsAsync"/>.</remarks>
         private void WriteCellFormats(StreamWriter streamWriter)
         {
             streamWriter.WriteLine("<cellXfs count=\"{0}\">", _styles.Count);
@@ -256,6 +446,53 @@ namespace LargeXlsx
                 }
             }
             streamWriter.WriteLine("</cellXfs>");
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="streamWriter"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteCellFormats"/>.</remarks>
+        private async Task WriteCellFormatsAsync(StreamWriter streamWriter)
+        {
+            await streamWriter.WriteLineAsync($"<cellXfs count=\"{_styles.Count}\">");
+            foreach (var style in _styles.OrderBy(s => s.Value))
+            {
+                await streamWriter.WriteAsync(
+                    string.Format("<xf numFmtId=\"{0}\" fontId=\"{1}\" fillId=\"{2}\" borderId=\"{3}\"" + 
+                    " applyNumberFormat=\"1\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\"",
+                    _numberFormats[style.Key.NumberFormat], _fonts[style.Key.Font], _fills[style.Key.Fill],
+                    _borders[style.Key.Border]));
+
+                if (style.Key.Alignment != XlsxAlignment.Default)
+                {
+                    await streamWriter.WriteAsync(" applyAlignment=\"1\"><alignment");
+                    var a = style.Key.Alignment;
+                    if (a.HorizontalType != XlsxAlignment.Horizontal.General) 
+                        await streamWriter.WriteAsync($" horizontal=\"{Util.EnumToAttributeValue(a.HorizontalType)}\"");
+                    if (a.VerticalType != XlsxAlignment.Vertical.Bottom) 
+                        await streamWriter.WriteAsync($" vertical=\"{Util.EnumToAttributeValue(a.VerticalType)}\"");
+                    if (a.Indent != 0) 
+                        await streamWriter.WriteAsync($" indent=\"{a.Indent}\"");
+                    if (a.JustifyLastLine) 
+                        await streamWriter.WriteAsync(" justifyLastLine=\"1\"");
+                    if (a.ReadingOrderType != XlsxAlignment.ReadingOrder.ContextDependent) 
+                        await streamWriter.WriteAsync($" readingOrder=\"{(int)a.ReadingOrderType}\"");
+                    if (a.ShrinkToFit) 
+                        await streamWriter.WriteAsync(" shrinkToFit=\"1\"");
+                    if (a.TextRotation != 0) 
+                        await streamWriter.WriteAsync($" textRotation=\"{a.TextRotation}\"");
+                    if (a.WrapText) 
+                        await streamWriter.WriteAsync(" wrapText=\"1\"");
+                    await streamWriter.WriteLineAsync("/></xf>");
+                }
+                else
+                {
+                    await streamWriter.WriteLineAsync("/>");
+                }
+            }
+            await streamWriter.WriteLineAsync("</cellXfs>");
         }
 
         private static string GetColorString(Color color) => $"{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";

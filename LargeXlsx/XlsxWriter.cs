@@ -32,6 +32,9 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 
+// provide an initials StringBuilder capacity
+#pragma warning disable U2U1108
+
 namespace LargeXlsx
 {
     public sealed class XlsxWriter : IDisposable

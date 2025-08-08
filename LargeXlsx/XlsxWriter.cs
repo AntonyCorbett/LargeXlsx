@@ -31,9 +31,14 @@ using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 
 // provide an initials StringBuilder capacity
 #pragma warning disable U2U1108
+// disable warning regarding early exists from async fns
+#pragma warning disable U2U1009
+// prefer string interpolation over String.Format
+#pragma warning disable U2U1104
 
 namespace LargeXlsx
 {
@@ -75,6 +80,7 @@ namespace LargeXlsx
             _zipArchive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
         }
 
+        // retain sync Dispose because there is no DisposeAsync in .NET Standard 2.0
         public void Dispose()
         {
             if (!_disposed)
@@ -92,6 +98,7 @@ namespace LargeXlsx
             }
         }
 
+        // no async version needed yet.
         private void SaveDocProps()
         {
             var assemblyName = Assembly.GetExecutingAssembly().GetName();
@@ -111,6 +118,7 @@ namespace LargeXlsx
             }
         }
 
+        // no async version needed yet.
         private void SaveContentTypes()
         {
             var entry = _zipArchive.CreateEntry("[Content_Types].xml", _compressionLevel);
@@ -134,6 +142,7 @@ namespace LargeXlsx
             }
         }
 
+        // no async version needed yet.
         private void SaveRels()
         {
             var entry = _zipArchive.CreateEntry("_rels/.rels", _compressionLevel);
@@ -147,6 +156,7 @@ namespace LargeXlsx
             }
         }
 
+        // no async version needed yet.
         private void SaveWorkbook()
         {
             var entry = _zipArchive.CreateEntry("xl/workbook.xml", _compressionLevel);
@@ -196,6 +206,7 @@ namespace LargeXlsx
             }
         }
 
+        // no async version needed yet.
         private void SaveWorkbookRels()
         {
             var entry = _zipArchive.CreateEntry("xl/_rels/workbook.xml.rels", _compressionLevel);
@@ -248,6 +259,47 @@ namespace LargeXlsx
             return this;
         }
 
+        public async Task<XlsxWriter> BeginWorksheetAsync(
+            string name,
+            int splitRow = 0,
+            int splitColumn = 0,
+            bool rightToLeft = false,
+            IEnumerable<XlsxColumn> columns = null,
+            bool showGridLines = true,
+            bool showHeaders = true,
+            XlsxWorksheetState state = XlsxWorksheetState.Visible)
+        {
+            if (name.Length > MaxSheetNameLength)
+                throw new ArgumentException($"The name \"{name}\" exceeds the maximum length of {MaxSheetNameLength} characters supported by Excel");
+            if (_worksheets.Any(ws => string.Equals(ws.Name, name, StringComparison.InvariantCultureIgnoreCase)))
+                throw new ArgumentException($"A worksheet named \"{name}\" has already been added");
+            _currentWorksheet?.Dispose();
+            _currentWorksheet = await Worksheet.CreateAsync(
+                zipArchive: _zipArchive,
+                compressionLevel: _compressionLevel,
+                id: _worksheets.Count + 1,
+                name: name,
+                splitRow: splitRow,
+                splitColumn: splitColumn,
+                rightToLeft: rightToLeft,
+                state: state,
+                stylesheet: _stylesheet,
+                sharedStringTable: _sharedStringTable,
+                columns: columns ?? Enumerable.Empty<XlsxColumn>(),
+                showGridLines: showGridLines,
+                showHeaders: showHeaders,
+                requireCellReferences: _requireCellReferences,
+                skipInvalidCharacters: _skipInvalidCharacters);
+            _worksheets.Add(_currentWorksheet);
+            return this;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="rowCount"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="SkipRowsAsync(int)"/></remarks>
         public XlsxWriter SkipRows(int rowCount)
         {
             CheckInWorksheet();
@@ -255,6 +307,27 @@ namespace LargeXlsx
             return this;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="rowCount"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="SkipRows(int)"/></remarks>
+        public async Task<XlsxWriter> SkipRowsAsync(int rowCount)
+        {
+            CheckInWorksheet();
+            await _currentWorksheet.SkipRowsAsync(rowCount);
+            return this;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="height"></param>
+        /// <param name="hidden"></param>
+        /// <param name="style"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="BeginRowAsync(double?, bool, XlsxStyle)"/></remarks>
         public XlsxWriter BeginRow(double? height = null, bool hidden = false, XlsxStyle style = null)
         {
             CheckInWorksheet();
@@ -262,6 +335,22 @@ namespace LargeXlsx
             return this;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="height"></param>
+        /// <param name="hidden"></param>
+        /// <param name="style"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="BeginRow(double?, bool, XlsxStyle)"/></remarks>
+        public async Task<XlsxWriter> BeginRowAsync(double? height = null, bool hidden = false, XlsxStyle style = null)
+        {
+            CheckInWorksheet();
+            await _currentWorksheet.BeginRowAsync(height, hidden, style);
+            return this;
+        }
+
+        // no async version needed.
         public XlsxWriter SkipColumns(int columnCount)
         {
             CheckInWorksheet();
@@ -269,6 +358,14 @@ namespace LargeXlsx
             return this;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <param name="repeatCount"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteAsync(XlsxStyle, int, int)"/></remarks>
         public XlsxWriter Write(XlsxStyle style = null, int columnSpan = 1, int repeatCount = 1)
         {
             if (columnSpan == 1)
@@ -283,6 +380,40 @@ namespace LargeXlsx
             return this;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <param name="repeatCount"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="Write(XlsxStyle, int, int)"/></remarks>
+        public async Task<XlsxWriter> WriteAsync(XlsxStyle style = null, int columnSpan = 1, int repeatCount = 1)
+        {
+            if (columnSpan == 1)
+            {
+                CheckInWorksheet();
+                await _currentWorksheet.WriteAsync(style ?? DefaultStyle, repeatCount);
+                return this;
+            }
+
+            for (var i = 0; i < repeatCount; i++)
+            {
+                var writer = AddMergedCell(1, columnSpan);
+                await writer.WriteAsync(style, 1);
+                await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+            }
+            return this;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteAsync(string, XlsxStyle, int)"/></remarks>
         public XlsxWriter Write(string value, XlsxStyle style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
@@ -295,6 +426,38 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).Write(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="Write(string, XlsxStyle, int)"/></remarks>
+        public async Task<XlsxWriter> WriteAsync(string value, XlsxStyle style = null, int columnSpan = 1)
+        {
+            if (columnSpan == 1)
+            {
+                CheckInWorksheet();
+                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle);
+                return this;
+            }
+
+            var writer = AddMergedCell(1, columnSpan);
+            await writer.WriteAsync(value, style, 1);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+
+            return writer;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteAsync(double, XlsxStyle, int)"/></remarks>
         public XlsxWriter Write(double value, XlsxStyle style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
@@ -307,6 +470,38 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).Write(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="Write(double, XlsxStyle, int)"/></remarks>
+        public async Task<XlsxWriter> WriteAsync(double value, XlsxStyle style = null, int columnSpan = 1)
+        {
+            if (columnSpan == 1)
+            {
+                CheckInWorksheet();
+                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle);
+                return this;
+            }
+
+            var writer = AddMergedCell(1, columnSpan);
+            await writer.WriteAsync(value, style, 1);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+
+            return writer;
+        }
+        
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns> 
+        /// <remarks>See also <see cref="WriteAsync(decimal, XlsxStyle, int)"/></remarks>
         public XlsxWriter Write(decimal value, XlsxStyle style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
@@ -318,7 +513,39 @@ namespace LargeXlsx
 
             return AddMergedCell(1, columnSpan).Write(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
+        
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="Write(decimal, XlsxStyle, int)"/></remarks>
+        public async Task<XlsxWriter> WriteAsync(decimal value, XlsxStyle style = null, int columnSpan = 1)
+        {
+            if (columnSpan == 1)
+            {
+                CheckInWorksheet();
+                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle);
+                return this;
+            }
 
+            var writer = AddMergedCell(1, columnSpan);
+            await writer.WriteAsync(value, style, 1);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+
+            return writer;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteAsync(int, XlsxStyle, int)"/></remarks>
         public XlsxWriter Write(int value, XlsxStyle style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
@@ -331,11 +558,65 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).Write(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="Write(int, XlsxStyle, int)"/></remarks>
+        public async Task<XlsxWriter> WriteAsync(int value, XlsxStyle style = null, int columnSpan = 1)
+        {
+            if (columnSpan == 1)
+            {
+                CheckInWorksheet();
+                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle);
+                return this;
+            }
+
+            var writer = AddMergedCell(1, columnSpan);
+            await writer.WriteAsync(value, style, 1);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+
+            return writer;
+        }
+
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteAsync(DateTime, XlsxStyle, int)"/></remarks>
         public XlsxWriter Write(DateTime value, XlsxStyle style = null, int columnSpan = 1)
         {
             return Write(Util.DateToDouble(value), style, columnSpan);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="Write(DateTime, XlsxStyle, int)"/></remarks>
+        public Task<XlsxWriter> WriteAsync(DateTime value, XlsxStyle style = null, int columnSpan = 1)
+        {
+            return WriteAsync(Util.DateToDouble(value), style, columnSpan);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteAsync(bool, XlsxStyle, int)"/></remarks>
         public XlsxWriter Write(bool value, XlsxStyle style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
@@ -348,6 +629,39 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).Write(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="Write(bool, XlsxStyle, int)"/></remarks>
+        public async Task<XlsxWriter> WriteAsync(bool value, XlsxStyle style = null, int columnSpan = 1)
+        {
+            if (columnSpan == 1)
+            {
+                CheckInWorksheet();
+                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle);
+                return this;
+            }
+
+            var writer = AddMergedCell(1, columnSpan);
+            await writer.WriteAsync(value, style, 1);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+
+            return writer;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="formula"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <param name="result"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteFormulaAsync(string, XlsxStyle, int, IConvertible)"/></remarks>
         public XlsxWriter WriteFormula(string formula, XlsxStyle style = null, int columnSpan = 1, IConvertible result = null)
         {
             if (columnSpan == 1)
@@ -361,6 +675,40 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).WriteFormula(formula, style, 1, result).Write(style, repeatCount: columnSpan - 1);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="formula"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <param name="result"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteFormula(string, XlsxStyle, int, IConvertible)"/></remarks>
+        public async Task<XlsxWriter> WriteFormulaAsync(string formula, XlsxStyle style = null, int columnSpan = 1, IConvertible result = null)
+        {
+            if (columnSpan == 1)
+            {
+                CheckInWorksheet();
+                if (result == null) _hasFormulasWithoutResult = true;
+                await _currentWorksheet.WriteFormulaAsync(formula, style ?? DefaultStyle, result);
+                return this;
+            }
+
+            var writer = AddMergedCell(1, columnSpan);
+            await writer.WriteFormulaAsync(formula, style, 1, result);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+
+            return writer;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteSharedStringAsync(string, XlsxStyle, int)"/></remarks>
         public XlsxWriter WriteSharedString(string value, XlsxStyle style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
@@ -373,6 +721,31 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).WriteSharedString(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="style"></param>
+        /// <param name="columnSpan"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="WriteSharedString(string, XlsxStyle, int)"/></remarks>
+        public async Task<XlsxWriter> WriteSharedStringAsync(string value, XlsxStyle style = null, int columnSpan = 1)
+        {
+            if (columnSpan == 1)
+            {
+                CheckInWorksheet();
+                await _currentWorksheet.WriteSharedStringAsync(value, style ?? DefaultStyle);
+                return this;
+            }
+
+            var writer = AddMergedCell(1, columnSpan);
+            await writer.WriteSharedStringAsync(value, style, 1);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+
+            return writer;
+        }
+
+        // no async version needed.
         public XlsxWriter AddMergedCell(int fromRow, int fromColumn, int rowCount, int columnCount)
         {
             CheckInWorksheet();
@@ -380,9 +753,11 @@ namespace LargeXlsx
             return this;
         }
 
+        // no async version needed.
         public XlsxWriter AddMergedCell(int rowCount, int columnCount) =>
             AddMergedCell(CurrentRowNumber, CurrentColumnNumber, rowCount, columnCount);
 
+        /// no async version needed.
         public XlsxWriter AddRowPageBreakBefore(int rowNumber)
         {
             CheckInWorksheet();
@@ -390,6 +765,7 @@ namespace LargeXlsx
             return this;
         }
 
+        // no async version needed.
         public XlsxWriter AddColumnPageBreakBefore(int columnNumber)
         {
             CheckInWorksheet();
@@ -403,6 +779,7 @@ namespace LargeXlsx
         public XlsxWriter AddColumnPageBreak() =>
             AddColumnPageBreakBefore(CurrentColumnNumber);
 
+        // no async version needed.
         public XlsxWriter SetAutoFilter(int fromRow, int fromColumn, int rowCount, int columnCount)
         {
             CheckInWorksheet();
@@ -410,6 +787,7 @@ namespace LargeXlsx
             return this;
         }
 
+        // no async version needed.
         public XlsxWriter AddDataValidation(int fromRow, int fromColumn, int rowCount, int columnCount, XlsxDataValidation dataValidation)
         {
             CheckInWorksheet();
@@ -417,22 +795,26 @@ namespace LargeXlsx
             return this;
         }
 
+        // no async version needed.
         public XlsxWriter AddDataValidation(int rowCount, int columnCount, XlsxDataValidation dataValidation)
         {
             return AddDataValidation(CurrentRowNumber, CurrentColumnNumber, rowCount, columnCount, dataValidation);
         }
 
+        // no async version needed.
         public XlsxWriter AddDataValidation(XlsxDataValidation dataValidation)
         {
             return AddDataValidation(CurrentRowNumber, CurrentColumnNumber, 1, 1, dataValidation);
         }
 
+        // no async version needed.
         public XlsxWriter SetDefaultStyle(XlsxStyle style)
         {
             DefaultStyle = style;
             return this;
         }
 
+        // no async version needed.
         public XlsxWriter SetSheetProtection(XlsxSheetProtection sheetProtection)
         {
             CheckInWorksheet();
@@ -440,6 +822,7 @@ namespace LargeXlsx
             return this;
         }
 
+        // no async version needed.
         public XlsxWriter SetHeaderFooter(XlsxHeaderFooter headerFooter)
         {
             CheckInWorksheet();

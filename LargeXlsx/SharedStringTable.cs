@@ -29,6 +29,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace LargeXlsx
 {
@@ -55,6 +56,12 @@ namespace LargeXlsx
             return id;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="zipArchive"></param>
+        /// <param name="compressionLevel"></param>
+        /// <remarks>See also <see cref="SaveAsync(ZipArchive, CompressionLevel)"/></remarks>
         public void Save(ZipArchive zipArchive, CompressionLevel compressionLevel)
         {
             var entry = zipArchive.CreateEntry("xl/sharedStrings.xml", compressionLevel);
@@ -72,6 +79,34 @@ namespace LargeXlsx
                         .Append("</t></si>\n");
                 }
                 streamWriter.WriteLine("</sst>");
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="zipArchive"></param>
+        /// <param name="compressionLevel"></param>
+        /// <returns></returns>
+        /// <remarks>See also <see cref="Save(ZipArchive, CompressionLevel)"/></remarks>
+        public async Task SaveAsync(ZipArchive zipArchive, CompressionLevel compressionLevel)
+        {
+            var entry = zipArchive.CreateEntry("xl/sharedStrings.xml", compressionLevel);
+            using (var streamWriter = new StreamWriter(entry.Open(), Encoding.UTF8))
+            {
+                await streamWriter.WriteLineAsync(
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" + 
+                    "<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+
+                foreach (var si in _stringItems.OrderBy(s => s.Value))
+                {
+                    await streamWriter.WriteAsync("<si><t");
+                    await streamWriter.AddSpacePreserveIfNeededAsync(si.Key);
+                    await streamWriter.WriteAsync(">");
+                    await streamWriter.AppendEscapedXmlTextAsync(si.Key, _skipInvalidCharacters);
+                    await streamWriter.WriteAsync("</t></si>\n");
+                }
+                await streamWriter.WriteLineAsync("</sst>");
             }
         }
     }

@@ -975,8 +975,7 @@ namespace LargeXlsx
                     await _streamWriter.WriteAsync(s);
                 }
             }
-
-            if (fromRow > 0)
+            else if (fromRow > 0)
             {
                 var s = string.Format(
                     "<pane ySplit=\"{0}\" topLeftCell=\"{1}\" activePane=\"bottomLeft\" state=\"frozen\"/>" +
@@ -992,7 +991,7 @@ namespace LargeXlsx
                     await _streamWriter.WriteAsync(s);
                 }
             }
-            if (fromColumn > 0)
+            else  if (fromColumn > 0)
             {
                 var s = string.Format(
                     "<pane xSplit=\"{0}\" topLeftCell=\"{1}\" activePane=\"topRight\" state=\"frozen\"/>" +

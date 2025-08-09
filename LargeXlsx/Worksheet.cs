@@ -37,7 +37,6 @@ namespace LargeXlsx
     internal class Worksheet : IDisposable
     {
         private readonly Stream _stream;
-        //private readonly TextWriter _contentBuffer;
         private readonly Stylesheet _stylesheet;
         private readonly SharedStringTable _sharedStringTable;
         private readonly bool _requireCellReferences;

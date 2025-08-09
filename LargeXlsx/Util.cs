@@ -63,7 +63,7 @@ namespace LargeXlsx
             return textWriter;
         }
 
-        public static TextWriter AppendEscapedXmlText(this TextWriter textWriter, string value, bool skipInvalidCharacters)
+        public static TextWriter AppendEscapedXmlText(this TextWriter writer, string value, bool skipInvalidCharacters)
         {
             // A plain old for provides a measurable improvement on garbage collection
             for (var i = 0; i < value.Length; i++)
@@ -71,24 +71,24 @@ namespace LargeXlsx
                 var c = value[i];
                 if (XmlConvert.IsXmlChar(c))
                 {
-                    if (c == '<') textWriter.Write("&lt;");
-                    else if (c == '>') textWriter.Write("&gt;");
-                    else if (c == '&') textWriter.Write("&amp;");
-                    else textWriter.Write(c);
+                    if (c == '<') writer.Write("&lt;");
+                    else if (c == '>') writer.Write("&gt;");
+                    else if (c == '&') writer.Write("&amp;");
+                    else writer.Write(c);
                 }
                 else if (i < value.Length - 1 && XmlConvert.IsXmlSurrogatePair(value[i + 1], c))
                 {
-                    textWriter.Write(c);
-                    textWriter.Write(value[i + 1]);
+                    writer.Write(c);
+                    writer.Write(value[i + 1]);
                     i++;
                 }
                 else if (!skipInvalidCharacters)
                     throw new XmlException($"Invalid XML character at position {i} in \"{value}\"");
             }
-            return textWriter;
+            return writer;
         }
 
-        public static TextWriter AppendEscapedXmlAttribute(this TextWriter textWriter, string value, bool skipInvalidCharacters)
+        public static ContentBuffer AppendEscapedXmlText(this ContentBuffer buffer, string value, bool skipInvalidCharacters)
         {
             // A plain old for provides a measurable improvement on garbage collection
             for (var i = 0; i < value.Length; i++)
@@ -96,23 +96,75 @@ namespace LargeXlsx
                 var c = value[i];
                 if (XmlConvert.IsXmlChar(c))
                 {
-                    if (c == '<') textWriter.Write("&lt;");
-                    else if (c == '>') textWriter.Write("&gt;");
-                    else if (c == '&') textWriter.Write("&amp;");
-                    else if (c == '\'') textWriter.Write("&apos;");
-                    else if (c == '"') textWriter.Write("&quot;");
-                    else textWriter.Write(c);
+                    if (c == '<') buffer.Write("&lt;");
+                    else if (c == '>') buffer.Write("&gt;");
+                    else if (c == '&') buffer.Write("&amp;");
+                    else buffer.Write(c);
                 }
                 else if (i < value.Length - 1 && XmlConvert.IsXmlSurrogatePair(value[i + 1], c))
                 {
-                    textWriter.Write(c);
-                    textWriter.Write(value[i + 1]);
+                    buffer.Write(c);
+                    buffer.Write(value[i + 1]);
+                    i++;
+                }
+                else if (!skipInvalidCharacters)
+                    throw new XmlException($"Invalid XML character at position {i} in \"{value}\"");
+            }
+            return buffer;
+        }
+
+        public static TextWriter AppendEscapedXmlAttribute(this TextWriter writer, string value, bool skipInvalidCharacters)
+        {
+            // A plain old for provides a measurable improvement on garbage collection
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                if (XmlConvert.IsXmlChar(c))
+                {
+                    if (c == '<') writer.Write("&lt;");
+                    else if (c == '>') writer.Write("&gt;");
+                    else if (c == '&') writer.Write("&amp;");
+                    else if (c == '\'') writer.Write("&apos;");
+                    else if (c == '"') writer.Write("&quot;");
+                    else writer.Write(c);
+                }
+                else if (i < value.Length - 1 && XmlConvert.IsXmlSurrogatePair(value[i + 1], c))
+                {
+                    writer.Write(c);
+                    writer.Write(value[i + 1]);
                     i++;
                 }
                 else if (!skipInvalidCharacters) 
                     throw new XmlException($"Invalid XML character at position {i} in \"{value}\"");
             }
-            return textWriter;
+            return writer;
+        }
+
+        public static ContentBuffer AppendEscapedXmlAttribute(this ContentBuffer buffer, string value, bool skipInvalidCharacters)
+        {
+            // A plain old for provides a measurable improvement on garbage collection
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                if (XmlConvert.IsXmlChar(c))
+                {
+                    if (c == '<') buffer.Write("&lt;");
+                    else if (c == '>') buffer.Write("&gt;");
+                    else if (c == '&') buffer.Write("&amp;");
+                    else if (c == '\'') buffer.Write("&apos;");
+                    else if (c == '"') buffer.Write("&quot;");
+                    else buffer.Write(c);
+                }
+                else if (i < value.Length - 1 && XmlConvert.IsXmlSurrogatePair(value[i + 1], c))
+                {
+                    buffer.Write(c);
+                    buffer.Write(value[i + 1]);
+                    i++;
+                }
+                else if (!skipInvalidCharacters)
+                    throw new XmlException($"Invalid XML character at position {i} in \"{value}\"");
+            }
+            return buffer;
         }
 
         public static string GetColumnName(int columnIndex)
@@ -178,11 +230,18 @@ namespace LargeXlsx
             return hash;
         }
 
-        public static TextWriter AddSpacePreserveIfNeeded(this TextWriter textWriter, string value)
+        public static TextWriter AddSpacePreserveIfNeeded(this TextWriter writer, string value)
         {
             if (value.Length > 0 && (XmlConvert.IsWhitespaceChar(value[0]) || XmlConvert.IsWhitespaceChar(value[value.Length - 1])))
-                textWriter.Write(" xml:space=\"preserve\"");
-            return textWriter;
+                writer.Write(" xml:space=\"preserve\"");
+            return writer;
+        }
+
+        public static ContentBuffer AddSpacePreserveIfNeeded(this ContentBuffer buffer, string value)
+        {
+            if (value.Length > 0 && (XmlConvert.IsWhitespaceChar(value[0]) || XmlConvert.IsWhitespaceChar(value[value.Length - 1])))
+                buffer.Write(" xml:space=\"preserve\"");
+            return buffer;
         }
     }
 }

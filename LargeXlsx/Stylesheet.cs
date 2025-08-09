@@ -29,6 +29,7 @@ using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.InteropServices.ComTypes;
 
 namespace LargeXlsx
 {
@@ -111,16 +112,16 @@ namespace LargeXlsx
         public void Save(ZipArchive zipArchive, CompressionLevel compressionLevel)
         {
             var entry = zipArchive.CreateEntry("xl/styles.xml", compressionLevel);
-            using (var streamWriter = new InvariantCultureStreamWriter(entry.Open()))
+            using (var buffer = new ContentBuffer(new InvariantCultureStreamWriter(entry.Open())))
             {
-                streamWriter.WriteLine("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                buffer.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
                                    + "<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
-                WriteNumberFormats(streamWriter);
-                WriteFonts(streamWriter);
-                WriteFills(streamWriter);
-                WriteBorders(streamWriter);
-                WriteCellFormats(streamWriter);
-                streamWriter.WriteLine("</styleSheet>");
+                WriteNumberFormats(buffer);
+                WriteFonts(buffer);
+                WriteFills(buffer);
+                WriteBorders(buffer);
+                WriteCellFormats(buffer);
+                buffer.AppendLine("</styleSheet>");
             }
         }
 
@@ -130,27 +131,27 @@ namespace LargeXlsx
             _lastUsedStyleId = styleId;
         }
 
-        private void WriteNumberFormats(StreamWriter streamWriter)
+        private void WriteNumberFormats(ContentBuffer buffer)
         {
-            streamWriter.WriteLine("<numFmts count=\"{0}\">", _numberFormats.Count(nf => nf.Value >= FirstCustomNumberFormatId));
+            buffer.AppendLine("<numFmts count=\"{0}\">", _numberFormats.Count(nf => nf.Value >= FirstCustomNumberFormatId));
             foreach (var numberFormat in _numberFormats.Where(nf => nf.Value >= FirstCustomNumberFormatId).OrderBy(nf => nf.Value))
             {
-                streamWriter
+                buffer
                     .Append("<numFmt numFmtId=\"")
                     .Append(numberFormat.Value)
                     .Append("\" formatCode=\"")
                     .AppendEscapedXmlAttribute(numberFormat.Key.FormatCode, false)
                     .Append("\"/>\n");
             }
-            streamWriter.WriteLine("</numFmts>");
+            buffer.AppendLine("</numFmts>");
         }
 
-        private void WriteFonts(StreamWriter streamWriter)
+        private void WriteFonts(ContentBuffer buffer)
         {
-            streamWriter.WriteLine("<fonts count=\"{0}\">", _fonts.Count);
+            buffer.AppendLine("<fonts count=\"{0}\">", _fonts.Count);
             foreach (var font in _fonts.OrderBy(f => f.Value))
             {
-                streamWriter
+                buffer
                     .Append("<font><sz val=\"")
                     .Append(font.Key.Size)
                     .Append("\"/><color rgb=\"")
@@ -159,33 +160,33 @@ namespace LargeXlsx
                     .AppendEscapedXmlAttribute(font.Key.Name, false)
                     .Append("\"/><family val=\"2\"/>");
                 if (font.Key.Bold)
-                    streamWriter.Append("<b val=\"true\"/>");
+                    buffer.Append("<b val=\"true\"/>");
                 if (font.Key.Italic)
-                    streamWriter.Append("<i val=\"true\"/>");
+                    buffer.Append("<i val=\"true\"/>");
                 if (font.Key.Strike)
-                    streamWriter.Append("<strike val=\"true\"/>");
+                    buffer.Append("<strike val=\"true\"/>");
                 switch (font.Key.UnderlineType)
                 {
                     case XlsxFont.Underline.None:
                         break;
                     case XlsxFont.Underline.Single:
-                        streamWriter.Append("<u/>");
+                        buffer.Append("<u/>");
                         break;
                     default:
-                        streamWriter.Append($"<u val=\"{Util.EnumToAttributeValue(font.Key.UnderlineType)}\"/>");
+                        buffer.Append($"<u val=\"{Util.EnumToAttributeValue(font.Key.UnderlineType)}\"/>");
                         break;
                 }
-                streamWriter.Append("</font>\n");
+                buffer.Append("</font>\n");
             }
-            streamWriter.WriteLine("</fonts>");
+            buffer.AppendLine("</fonts>");
         }
 
-        private void WriteFills(StreamWriter streamWriter)
+        private void WriteFills(ContentBuffer buffer)
         {
-            streamWriter.WriteLine("<fills count=\"{0}\">", _fills.Count);
+            buffer.AppendLine("<fills count=\"{0}\">", _fills.Count);
             foreach (var fill in _fills.OrderBy(f => f.Value))
             {
-                streamWriter.WriteLine("<fill>"
+                buffer.AppendLine("<fill>"
                                    + "<patternFill patternType=\"{0}\">"
                                    + "<fgColor rgb=\"{1}\"/>"
                                    + "<bgColor rgb=\"{1}\"/>"
@@ -193,69 +194,69 @@ namespace LargeXlsx
                                    + "</fill>",
                     Util.EnumToAttributeValue(fill.Key.PatternType), GetColorString(fill.Key.Color));
             }
-            streamWriter.WriteLine("</fills>");
+            buffer.AppendLine("</fills>");
         }
 
-        private void WriteBorders(StreamWriter streamWriter)
+        private void WriteBorders(ContentBuffer buffer)
         {
-            streamWriter.WriteLine($"<borders count=\"{_borders.Count}\">");
+            buffer.AppendLine($"<borders count=\"{_borders.Count}\">");
             foreach (var border in _borders.OrderBy(b => b.Value))
             {
-                streamWriter.WriteLine($"<border diagonalDown=\"{Util.BoolToInt(border.Key.DiagonalDown)}\" diagonalUp=\"{Util.BoolToInt(border.Key.DiagonalUp)}\">");
-                WriteBorderLine(streamWriter, "left", border.Key.Left);
-                WriteBorderLine(streamWriter, "right", border.Key.Right);
-                WriteBorderLine(streamWriter, "top", border.Key.Top);
-                WriteBorderLine(streamWriter, "bottom", border.Key.Bottom);
-                WriteBorderLine(streamWriter, "diagonal", border.Key.Diagonal);
-                streamWriter.WriteLine("</border>");
+                buffer.AppendLine($"<border diagonalDown=\"{Util.BoolToInt(border.Key.DiagonalDown)}\" diagonalUp=\"{Util.BoolToInt(border.Key.DiagonalUp)}\">");
+                WriteBorderLine(buffer, "left", border.Key.Left);
+                WriteBorderLine(buffer, "right", border.Key.Right);
+                WriteBorderLine(buffer, "top", border.Key.Top);
+                WriteBorderLine(buffer, "bottom", border.Key.Bottom);
+                WriteBorderLine(buffer, "diagonal", border.Key.Diagonal);
+                buffer.AppendLine("</border>");
             }
-            streamWriter.WriteLine("</borders>");
+            buffer.AppendLine("</borders>");
         }
 
-        private static void WriteBorderLine(StreamWriter streamWriter, string elementName, XlsxBorder.Line line)
+        private static void WriteBorderLine(ContentBuffer buffer, string elementName, XlsxBorder.Line line)
         {
             if (line != null)
             {
-                streamWriter.Write($"<{elementName} style=\"{Util.EnumToAttributeValue(line.Style)}\">");
+                buffer.Append($"<{elementName} style=\"{Util.EnumToAttributeValue(line.Style)}\">");
                 if (line.Color != Color.Transparent)
-                    streamWriter.Write($"<color rgb=\"{GetColorString(line.Color)}\"/>");
-                streamWriter.WriteLine($"</{elementName}>");
+                    buffer.Append($"<color rgb=\"{GetColorString(line.Color)}\"/>");
+                buffer.AppendLine($"</{elementName}>");
             }
             else
             {
-                streamWriter.WriteLine($"<{elementName}/>");
+                buffer.AppendLine($"<{elementName}/>");
             }
         }
 
-        private void WriteCellFormats(StreamWriter streamWriter)
+        private void WriteCellFormats(ContentBuffer buffer)
         {
-            streamWriter.WriteLine("<cellXfs count=\"{0}\">", _styles.Count);
+            buffer.AppendLine("<cellXfs count=\"{0}\">", _styles.Count);
             foreach (var style in _styles.OrderBy(s => s.Value))
             {
-                streamWriter.Write("<xf numFmtId=\"{0}\" fontId=\"{1}\" fillId=\"{2}\" borderId=\"{3}\""
+                buffer.Append("<xf numFmtId=\"{0}\" fontId=\"{1}\" fillId=\"{2}\" borderId=\"{3}\""
                                    + " applyNumberFormat=\"1\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\"",
                     _numberFormats[style.Key.NumberFormat], _fonts[style.Key.Font], _fills[style.Key.Fill],
                     _borders[style.Key.Border]);
                 if (style.Key.Alignment != XlsxAlignment.Default)
                 {
-                    streamWriter.Write(" applyAlignment=\"1\"><alignment");
+                    buffer.Append(" applyAlignment=\"1\"><alignment");
                     var a = style.Key.Alignment;
-                    if (a.HorizontalType != XlsxAlignment.Horizontal.General) streamWriter.Write(" horizontal=\"{0}\"", Util.EnumToAttributeValue(a.HorizontalType));
-                    if (a.VerticalType != XlsxAlignment.Vertical.Bottom) streamWriter.Write(" vertical=\"{0}\"", Util.EnumToAttributeValue(a.VerticalType));
-                    if (a.Indent != 0) streamWriter.Write(" indent=\"{0}\"", a.Indent);
-                    if (a.JustifyLastLine) streamWriter.Write(" justifyLastLine=\"1\"");
-                    if (a.ReadingOrderType != XlsxAlignment.ReadingOrder.ContextDependent) streamWriter.Write(" readingOrder=\"{0}\"", (int)a.ReadingOrderType);
-                    if (a.ShrinkToFit) streamWriter.Write(" shrinkToFit=\"1\"");
-                    if (a.TextRotation != 0) streamWriter.Write(" textRotation=\"{0}\"", a.TextRotation);
-                    if (a.WrapText) streamWriter.Write(" wrapText=\"1\"");
-                    streamWriter.WriteLine("/></xf>");
+                    if (a.HorizontalType != XlsxAlignment.Horizontal.General) buffer.Append(" horizontal=\"{0}\"", Util.EnumToAttributeValue(a.HorizontalType));
+                    if (a.VerticalType != XlsxAlignment.Vertical.Bottom) buffer.Append(" vertical=\"{0}\"", Util.EnumToAttributeValue(a.VerticalType));
+                    if (a.Indent != 0) buffer.Append(" indent=\"{0}\"", a.Indent);
+                    if (a.JustifyLastLine) buffer.Append(" justifyLastLine=\"1\"");
+                    if (a.ReadingOrderType != XlsxAlignment.ReadingOrder.ContextDependent) buffer.Append(" readingOrder=\"{0}\"", (int)a.ReadingOrderType);
+                    if (a.ShrinkToFit) buffer.Append(" shrinkToFit=\"1\"");
+                    if (a.TextRotation != 0) buffer.Append(" textRotation=\"{0}\"", a.TextRotation);
+                    if (a.WrapText) buffer.Append(" wrapText=\"1\"");
+                    buffer.AppendLine("/></xf>");
                 }
                 else
                 {
-                    streamWriter.WriteLine("/>");
+                    buffer.AppendLine("/>");
                 }
             }
-            streamWriter.WriteLine("</cellXfs>");
+            buffer.AppendLine("</cellXfs>");
         }
 
         private static string GetColorString(Color color) => $"{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";

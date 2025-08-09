@@ -30,13 +30,14 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 
 namespace LargeXlsx
 {
     internal class Worksheet : IDisposable
     {
         private readonly Stream _stream;
-        private readonly TextWriter _streamWriter;
+        //private readonly TextWriter _contentBuffer;
         private readonly Stylesheet _stylesheet;
         private readonly SharedStringTable _sharedStringTable;
         private readonly bool _requireCellReferences;
@@ -45,6 +46,7 @@ namespace LargeXlsx
         private readonly Dictionary<XlsxDataValidation, List<string>> _cellRefsByDataValidation;
         private readonly HashSet<int> _pageBreakRowNumbers;
         private readonly HashSet<int> _pageBreakColumnNumbers;
+        private readonly ContentBuffer _contentBuffer;
         private string _autoFilterRef;
         private string _autoFilterAbsoluteRef;
         private XlsxSheetProtection _sheetProtection;
@@ -91,9 +93,9 @@ namespace LargeXlsx
             _cellRefsByDataValidation = new Dictionary<XlsxDataValidation, List<string>>();
             var entry = zipArchive.CreateEntry($"xl/worksheets/sheet{id}.xml", compressionLevel);
             _stream = entry.Open();
-            _streamWriter = new InvariantCultureStreamWriter(_stream);
+            _contentBuffer = new ContentBuffer(new InvariantCultureStreamWriter(_stream));
 
-            _streamWriter.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+            _contentBuffer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
                                 + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">"
                                 + "<sheetViews>"
                                 + $"<sheetView showGridLines=\"{Util.BoolToInt(showGridLines)}\" showRowColHeaders=\"{Util.BoolToInt(showHeaders)}\""
@@ -101,23 +103,23 @@ namespace LargeXlsx
 
             if (splitRow > 0 || splitColumn > 0)
                 FreezePanes(splitRow, splitColumn);
-            _streamWriter.Write("</sheetView></sheetViews>\n");
+            _contentBuffer.Write("</sheetView></sheetViews>\n");
             WriteColumns(columns);
-            _streamWriter.Write("<sheetData>\n");
+            _contentBuffer.Write("<sheetData>\n");
         }
 
         public void Dispose()
         {
             CloseLastRow();
-            _streamWriter.Write("</sheetData>\n");
+            _contentBuffer.Write("</sheetData>\n");
             WriteSheetProtection();
             WriteAutoFilter();
             WriteMergedCells();
             WriteDataValidations();
             WriteHeaderFooter();
             WritePageBreaks();
-            _streamWriter.Write("</worksheet>\n");
-            _streamWriter.Dispose();
+            _contentBuffer.Write("</worksheet>\n");
+            _contentBuffer.Dispose();
             _stream.Dispose();
         }
 
@@ -129,21 +131,21 @@ namespace LargeXlsx
             CurrentRowNumber++;
             _stringedCurrentRowNumber = null;
             CurrentColumnNumber = 1;
-            _streamWriter.Write("<row");
+            _contentBuffer.Write("<row");
             if (_requireCellReferences || _needsRef)
             {
-                _streamWriter.Write(" r=\"");
+                _contentBuffer.Write(" r=\"");
                 WriteCurrentRowNumber();
-                _streamWriter.Write("\"");
+                _contentBuffer.Write("\"");
                 _needsRef = false;
             }
             if (height.HasValue)
-                _streamWriter.Write(" ht=\"{0}\" customHeight=\"1\"", height);
+                _contentBuffer.Write(" ht=\"{0}\" customHeight=\"1\"", height);
             if (hidden)
-                _streamWriter.Write(" hidden=\"1\"");
+                _contentBuffer.Write(" hidden=\"1\"");
             if (style != null)
-                _streamWriter.Write(" s=\"{0}\" customFormat=\"1\"", _stylesheet.ResolveStyleId(style));
-            _streamWriter.Write(">\n");
+                _contentBuffer.Write(" s=\"{0}\" customFormat=\"1\"", _stylesheet.ResolveStyleId(style));
+            _contentBuffer.Write(">\n");
         }
 
         public void SkipRows(int rowCount)
@@ -170,10 +172,10 @@ namespace LargeXlsx
             for (var i = 0; i < repeatCount; i++)
             {
                 // <c r="{0}{1}" s="{2}"/>
-                _streamWriter.Write("<c");
+                _contentBuffer.Write("<c");
                 WriteCellRef();
                 WriteStyle(styleId);
-                _streamWriter.Write("/>\n");
+                _contentBuffer.Write("/>\n");
                 CurrentColumnNumber++;
             }
         }
@@ -187,10 +189,10 @@ namespace LargeXlsx
             }
             EnsureRow();
             // <c r="{0}{1}" s="{2}" t="inlineStr"><is><t xml:space="preserve">{3}</t></is></c>
-            _streamWriter.Write("<c");
+            _contentBuffer.Write("<c");
             WriteCellRef();
             WriteStyle(style);
-            _streamWriter
+            _contentBuffer
                 .Append(" t=\"inlineStr\"><is><t")
                 .AddSpacePreserveIfNeeded(value)
                 .Append(">")
@@ -203,10 +205,10 @@ namespace LargeXlsx
         {
             EnsureRow();
             // <c r="{0}{1}" s="{2}"><v>{3}</v></c>
-            _streamWriter.Write("<c");
+            _contentBuffer.Write("<c");
             WriteCellRef();
             WriteStyle(style);
-            _streamWriter.Append("><v>").Append(value).Append("</v></c>\n");
+            _contentBuffer.Append("><v>").Append(value).Append("</v></c>\n");
             CurrentColumnNumber++;
         }
 
@@ -214,10 +216,10 @@ namespace LargeXlsx
         {
             EnsureRow();
             // <c r="{0}{1}" s="{2}"><v>{3}</v></c>
-            _streamWriter.Write("<c");
+            _contentBuffer.Write("<c");
             WriteCellRef();
             WriteStyle(style);
-            _streamWriter.Append("><v>").Append(value).Append("</v></c>\n");
+            _contentBuffer.Append("><v>").Append(value).Append("</v></c>\n");
             CurrentColumnNumber++;
         }
 
@@ -225,10 +227,10 @@ namespace LargeXlsx
         {
             EnsureRow();
             // <c r="{0}{1}" s="{2}"><v>{3}</v></c>
-            _streamWriter.Write("<c");
+            _contentBuffer.Write("<c");
             WriteCellRef();
             WriteStyle(style);
-            _streamWriter.Append("><v>").Append(value).Append("</v></c>\n");
+            _contentBuffer.Append("><v>").Append(value).Append("</v></c>\n");
             CurrentColumnNumber++;
         }
 
@@ -236,10 +238,10 @@ namespace LargeXlsx
         {
             EnsureRow();
             // <c r="{0}{1}" s="{2}" t="b"><v>{3}</v></c>
-            _streamWriter.Write("<c");
+            _contentBuffer.Write("<c");
             WriteCellRef();
             WriteStyle(style);
-            _streamWriter
+            _contentBuffer
                 .Append(" t=\"b\"><v>")
                 .Append(Util.BoolToInt(value))
                 .Append("</v></c>\n");
@@ -250,18 +252,18 @@ namespace LargeXlsx
         {
             // <c r="{0}{1}" s="{2}" t="str"><f>{3}</f><v>{4}</v></c>
             EnsureRow();
-            _streamWriter.Write("<c");
+            _contentBuffer.Write("<c");
             WriteCellRef();
             WriteStyle(style);
-            _streamWriter.Append(" t=\"str\"><f>")
+            _contentBuffer.Append(" t=\"str\"><f>")
                 .AppendEscapedXmlText(formula, _skipInvalidCharacters)
                 .Append("</f>");
             if (result != null)
-                _streamWriter
+                _contentBuffer
                     .Append("<v>")
                     .AppendEscapedXmlText(result.ToString(CultureInfo.InvariantCulture), _skipInvalidCharacters)
                     .Append("</v>");
-            _streamWriter.Write("</c>\n");
+            _contentBuffer.Write("</c>\n");
             CurrentColumnNumber++;
         }
 
@@ -269,10 +271,10 @@ namespace LargeXlsx
         {
             EnsureRow();
             // <c r="{0}{1}" s="{2}" t="s"><v>{3}</v></c>
-            _streamWriter.Write("<c");
+            _contentBuffer.Write("<c");
             WriteCellRef();
             WriteStyle(style);
-            _streamWriter
+            _contentBuffer
                 .Append(" t=\"s\"><v>")
                 .Append(_sharedStringTable.ResolveStringId(value))
                 .Append("</v></c>\n");
@@ -345,10 +347,10 @@ namespace LargeXlsx
         {
             if (_requireCellReferences || _needsRef)
             {
-                _streamWriter.Write(" r=\"");
-                _streamWriter.Write(Util.GetColumnName(CurrentColumnNumber));
+                _contentBuffer.Write(" r=\"");
+                _contentBuffer.Write(Util.GetColumnName(CurrentColumnNumber));
                 WriteCurrentRowNumber();
-                _streamWriter.Write("\"");
+                _contentBuffer.Write("\"");
                 _needsRef = false;
             }
         }
@@ -357,13 +359,13 @@ namespace LargeXlsx
         {
             if (_stringedCurrentRowNumber == null)
                 _stringedCurrentRowNumber = CurrentRowNumber.ToString();
-            _streamWriter.Write(_stringedCurrentRowNumber);
+            _contentBuffer.Write(_stringedCurrentRowNumber);
         }
 
         private void WriteStyle(int styleId)
         {
             if (styleId != 0)
-                _streamWriter.Append(" s=\"").Append(styleId).Append("\"");
+                _contentBuffer.Append(" s=\"").Append(styleId).Append("\"");
         }
 
         private void WriteStyle(XlsxStyle style)
@@ -381,7 +383,7 @@ namespace LargeXlsx
         {
             if (CurrentColumnNumber > 0)
             {
-                _streamWriter.Write("</row>\n");
+                _contentBuffer.Write("</row>\n");
                 CurrentColumnNumber = 0;
             }
         }
@@ -391,19 +393,19 @@ namespace LargeXlsx
             var topLeftCell = $"{Util.GetColumnName(fromColumn + 1)}{fromRow + 1}";
             if (fromRow > 0 && fromColumn > 0)
             {
-                _streamWriter.Write("<pane xSplit=\"{0}\" ySplit=\"{1}\" topLeftCell=\"{2}\" activePane=\"bottomRight\" state=\"frozen\"/>"
+                _contentBuffer.Write("<pane xSplit=\"{0}\" ySplit=\"{1}\" topLeftCell=\"{2}\" activePane=\"bottomRight\" state=\"frozen\"/>"
                                         + "<selection pane=\"bottomRight\" activeCell=\"{2}\" sqref=\"{2}\"/>\n",
                     fromColumn, fromRow, topLeftCell);
             }
             else if (fromRow > 0)
             {
-                _streamWriter.Write("<pane ySplit=\"{0}\" topLeftCell=\"{1}\" activePane=\"bottomLeft\" state=\"frozen\"/>"
+                _contentBuffer.Write("<pane ySplit=\"{0}\" topLeftCell=\"{1}\" activePane=\"bottomLeft\" state=\"frozen\"/>"
                                     + "<selection pane=\"bottomLeft\" activeCell=\"{1}\" sqref=\"{1}\"/>\n",
                     fromRow, topLeftCell);
             }
             else if (fromColumn > 0)
             {
-                _streamWriter.Write("<pane xSplit=\"{0}\" topLeftCell=\"{1}\" activePane=\"topRight\" state=\"frozen\"/>"
+                _contentBuffer.Write("<pane xSplit=\"{0}\" topLeftCell=\"{1}\" activePane=\"topRight\" state=\"frozen\"/>"
                                     + "<selection pane=\"topRight\" activeCell=\"{1}\" sqref=\"{1}\"/>\n",
                     fromColumn, topLeftCell);
             }
@@ -419,75 +421,75 @@ namespace LargeXlsx
                 {
                     if (!colsWritten)
                     {
-                        _streamWriter.Write("<cols>");
+                        _contentBuffer.Write("<cols>");
                         colsWritten = true;
                     }
-                    _streamWriter.Write("<col min=\"{0}\" max=\"{1}\"", columnIndex, columnIndex + column.Count - 1);
-                    if (column.Width.HasValue) _streamWriter.Write(" width=\"{0}\"", column.Width.Value);
-                    if (column.Hidden) _streamWriter.Write(" hidden=\"1\"");
-                    if (column.Width.HasValue) _streamWriter.Write(" customWidth=\"1\"");
-                    if (column.Style != null) _streamWriter.Write(" style=\"{0}\"", _stylesheet.ResolveStyleId(column.Style));
-                    _streamWriter.Write("/>\n");
+                    _contentBuffer.Write("<col min=\"{0}\" max=\"{1}\"", columnIndex, columnIndex + column.Count - 1);
+                    if (column.Width.HasValue) _contentBuffer.Write(" width=\"{0}\"", column.Width.Value);
+                    if (column.Hidden) _contentBuffer.Write(" hidden=\"1\"");
+                    if (column.Width.HasValue) _contentBuffer.Write(" customWidth=\"1\"");
+                    if (column.Style != null) _contentBuffer.Write(" style=\"{0}\"", _stylesheet.ResolveStyleId(column.Style));
+                    _contentBuffer.Write("/>\n");
                 }
                 columnIndex += column.Count;
             }
             if (colsWritten)
-                _streamWriter.Write("</cols>\n");
+                _contentBuffer.Write("</cols>\n");
         }
 
         private void WriteAutoFilter()
         {
             if (_autoFilterRef != null)
-                _streamWriter.Write("<autoFilter ref=\"{0}\"/>\n", _autoFilterRef);
+                _contentBuffer.Write("<autoFilter ref=\"{0}\"/>\n", _autoFilterRef);
         }
 
         private void WriteMergedCells()
         {
             if (!_mergedCellRefs.Any())
                 return;
-            _streamWriter.Write("<mergeCells count=\"{0}\">\n", _mergedCellRefs.Count);
+            _contentBuffer.Write("<mergeCells count=\"{0}\">\n", _mergedCellRefs.Count);
             foreach (var mergedCell in _mergedCellRefs)
-                _streamWriter.Write("<mergeCell ref=\"{0}\"/>\n", mergedCell);
-            _streamWriter.Write("</mergeCells>\n");
+                _contentBuffer.Write("<mergeCell ref=\"{0}\"/>\n", mergedCell);
+            _contentBuffer.Write("</mergeCells>\n");
         }
 
         private void WriteDataValidations()
         {
             if (!_cellRefsByDataValidation.Any())
                 return;
-            _streamWriter.Write("<dataValidations count=\"{0}\">\n", _cellRefsByDataValidation.Count);
+            _contentBuffer.Write("<dataValidations count=\"{0}\">\n", _cellRefsByDataValidation.Count);
             foreach (var kvp in _cellRefsByDataValidation)
             {
-                _streamWriter.Write("<dataValidation sqref=\"{0}\" allowBlank=\"{1}\"",
+                _contentBuffer.Write("<dataValidation sqref=\"{0}\" allowBlank=\"{1}\"",
                     string.Join(" ", kvp.Value.Distinct()), Util.BoolToInt(kvp.Key.AllowBlank));
                 if (kvp.Key.Error != null)
-                    _streamWriter.Append(" error=\"").AppendEscapedXmlAttribute(kvp.Key.Error, _skipInvalidCharacters).Write('"');
+                    _contentBuffer.Append(" error=\"").AppendEscapedXmlAttribute(kvp.Key.Error, _skipInvalidCharacters).Write('"');
                 if (kvp.Key.ErrorStyleValue.HasValue)
-                    _streamWriter.Write(" errorStyle=\"{0}\"", Util.EnumToAttributeValue(kvp.Key.ErrorStyleValue));
+                    _contentBuffer.Write(" errorStyle=\"{0}\"", Util.EnumToAttributeValue(kvp.Key.ErrorStyleValue));
                 if (kvp.Key.ErrorTitle != null)
-                    _streamWriter.Append(" errorTitle=\"").AppendEscapedXmlAttribute(kvp.Key.ErrorTitle, _skipInvalidCharacters).Write('"');
+                    _contentBuffer.Append(" errorTitle=\"").AppendEscapedXmlAttribute(kvp.Key.ErrorTitle, _skipInvalidCharacters).Write('"');
                 if (kvp.Key.OperatorValue.HasValue)
-                    _streamWriter.Write(" operator=\"{0}\"", Util.EnumToAttributeValue(kvp.Key.OperatorValue));
+                    _contentBuffer.Write(" operator=\"{0}\"", Util.EnumToAttributeValue(kvp.Key.OperatorValue));
                 if (kvp.Key.Prompt != null)
-                    _streamWriter.Append(" prompt=\"").AppendEscapedXmlAttribute(kvp.Key.Prompt, _skipInvalidCharacters).Write('"');
+                    _contentBuffer.Append(" prompt=\"").AppendEscapedXmlAttribute(kvp.Key.Prompt, _skipInvalidCharacters).Write('"');
                 if (kvp.Key.PromptTitle != null)
-                    _streamWriter.Append(" promptTitle=\"").AppendEscapedXmlAttribute(kvp.Key.PromptTitle, _skipInvalidCharacters).Write('"');
+                    _contentBuffer.Append(" promptTitle=\"").AppendEscapedXmlAttribute(kvp.Key.PromptTitle, _skipInvalidCharacters).Write('"');
                 if (kvp.Key.ShowDropDown)
-                    _streamWriter.Write(" showDropDown=\"1\"");
+                    _contentBuffer.Write(" showDropDown=\"1\"");
                 if (kvp.Key.ShowErrorMessage)
-                    _streamWriter.Write(" showErrorMessage=\"1\"");
+                    _contentBuffer.Write(" showErrorMessage=\"1\"");
                 if (kvp.Key.ShowInputMessage)
-                    _streamWriter.Write(" showInputMessage=\"1\"");
+                    _contentBuffer.Write(" showInputMessage=\"1\"");
                 if (kvp.Key.ValidationTypeValue.HasValue)
-                    _streamWriter.Write(" type=\"{0}\"", Util.EnumToAttributeValue(kvp.Key.ValidationTypeValue));
-                _streamWriter.Write(">");
+                    _contentBuffer.Write(" type=\"{0}\"", Util.EnumToAttributeValue(kvp.Key.ValidationTypeValue));
+                _contentBuffer.Write(">");
                 if (kvp.Key.Formula1 != null)
-                    _streamWriter.Append("<formula1>").AppendEscapedXmlText(kvp.Key.Formula1, _skipInvalidCharacters).Append("</formula1>");
+                    _contentBuffer.Append("<formula1>").AppendEscapedXmlText(kvp.Key.Formula1, _skipInvalidCharacters).Append("</formula1>");
                 if (kvp.Key.Formula2 != null)
-                    _streamWriter.Append("<formula2>").AppendEscapedXmlText(kvp.Key.Formula2, _skipInvalidCharacters).Append("</formula2>");
-                _streamWriter.Write("</dataValidation>\n");
+                    _contentBuffer.Append("<formula2>").AppendEscapedXmlText(kvp.Key.Formula2, _skipInvalidCharacters).Append("</formula2>");
+                _contentBuffer.Write("</dataValidation>\n");
             }
-            _streamWriter.Write("</dataValidations>\n");
+            _contentBuffer.Write("</dataValidations>\n");
         }
 
         private void WriteSheetProtection()
@@ -497,24 +499,24 @@ namespace LargeXlsx
             const int spinCount = 100000;
             var saltValue = Guid.NewGuid().ToByteArray();
             var hash = Util.ComputePasswordHash(_sheetProtection.Password, saltValue, spinCount);
-            _streamWriter.Write("<sheetProtection algorithmName=\"SHA-512\" hashValue=\"{0}\" saltValue=\"{1}\" spinCount=\"{2}\"", Convert.ToBase64String(hash), Convert.ToBase64String(saltValue), spinCount);
-            if (_sheetProtection.Sheet) _streamWriter.Write(" sheet=\"1\"");
-            if (_sheetProtection.Objects) _streamWriter.Write(" objects=\"1\"");
-            if (_sheetProtection.Scenarios) _streamWriter.Write(" scenarios=\"1\"");
-            if (!_sheetProtection.FormatCells) _streamWriter.Write(" formatCells=\"0\"");
-            if (!_sheetProtection.FormatColumns) _streamWriter.Write(" formatColumns=\"0\"");
-            if (!_sheetProtection.FormatRows) _streamWriter.Write(" formatRows=\"0\"");
-            if (!_sheetProtection.InsertColumns) _streamWriter.Write(" insertColumns=\"0\"");
-            if (!_sheetProtection.InsertRows) _streamWriter.Write(" insertRows=\"0\"");
-            if (!_sheetProtection.InsertHyperlinks) _streamWriter.Write(" insertHyperlinks=\"0\"");
-            if (!_sheetProtection.DeleteColumns) _streamWriter.Write(" deleteColumns=\"0\"");
-            if (!_sheetProtection.DeleteRows) _streamWriter.Write(" deleteRows=\"0\"");
-            if (_sheetProtection.SelectLockedCells) _streamWriter.Write(" selectLockedCells=\"1\"");
-            if (!_sheetProtection.Sort) _streamWriter.Write(" sort=\"0\"");
-            if (!_sheetProtection.AutoFilter) _streamWriter.Write(" autoFilter=\"0\"");
-            if (!_sheetProtection.PivotTables) _streamWriter.Write(" pivotTables=\"0\"");
-            if (_sheetProtection.SelectUnlockedCells) _streamWriter.Write(" selectUnlockedCells=\"1\"");
-            _streamWriter.Write("/>\n");
+            _contentBuffer.Write("<sheetProtection algorithmName=\"SHA-512\" hashValue=\"{0}\" saltValue=\"{1}\" spinCount=\"{2}\"", Convert.ToBase64String(hash), Convert.ToBase64String(saltValue), spinCount);
+            if (_sheetProtection.Sheet) _contentBuffer.Write(" sheet=\"1\"");
+            if (_sheetProtection.Objects) _contentBuffer.Write(" objects=\"1\"");
+            if (_sheetProtection.Scenarios) _contentBuffer.Write(" scenarios=\"1\"");
+            if (!_sheetProtection.FormatCells) _contentBuffer.Write(" formatCells=\"0\"");
+            if (!_sheetProtection.FormatColumns) _contentBuffer.Write(" formatColumns=\"0\"");
+            if (!_sheetProtection.FormatRows) _contentBuffer.Write(" formatRows=\"0\"");
+            if (!_sheetProtection.InsertColumns) _contentBuffer.Write(" insertColumns=\"0\"");
+            if (!_sheetProtection.InsertRows) _contentBuffer.Write(" insertRows=\"0\"");
+            if (!_sheetProtection.InsertHyperlinks) _contentBuffer.Write(" insertHyperlinks=\"0\"");
+            if (!_sheetProtection.DeleteColumns) _contentBuffer.Write(" deleteColumns=\"0\"");
+            if (!_sheetProtection.DeleteRows) _contentBuffer.Write(" deleteRows=\"0\"");
+            if (_sheetProtection.SelectLockedCells) _contentBuffer.Write(" selectLockedCells=\"1\"");
+            if (!_sheetProtection.Sort) _contentBuffer.Write(" sort=\"0\"");
+            if (!_sheetProtection.AutoFilter) _contentBuffer.Write(" autoFilter=\"0\"");
+            if (!_sheetProtection.PivotTables) _contentBuffer.Write(" pivotTables=\"0\"");
+            if (_sheetProtection.SelectUnlockedCells) _contentBuffer.Write(" selectUnlockedCells=\"1\"");
+            _contentBuffer.Write("/>\n");
         }
 
         private void WriteHeaderFooter()
@@ -523,42 +525,42 @@ namespace LargeXlsx
                 return;
             var differentFirst = _headerFooter.FirstHeader != null || _headerFooter.FirstFooter != null;
             var differentOddEven = _headerFooter.EvenHeader != null || _headerFooter.EvenFooter != null;
-            _streamWriter.Write(
+            _contentBuffer.Write(
                 "<headerFooter alignWithMargins=\"{0}\" differentFirst=\"{1}\" differentOddEven=\"{2}\" scaleWithDoc=\"{3}\">\n",
                 Util.BoolToInt(_headerFooter.AlignWithMargins),
                 Util.BoolToInt(differentFirst),
                 Util.BoolToInt(differentOddEven),
                 Util.BoolToInt(_headerFooter.ScaleWithDoc));
             if (_headerFooter.OddHeader != null)
-                _streamWriter.Append("<oddHeader>").AppendEscapedXmlText(_headerFooter.OddHeader, _skipInvalidCharacters).Append("</oddHeader>\n");
+                _contentBuffer.Append("<oddHeader>").AppendEscapedXmlText(_headerFooter.OddHeader, _skipInvalidCharacters).Append("</oddHeader>\n");
             if (_headerFooter.OddFooter != null)
-                _streamWriter.Append("<oddFooter>").AppendEscapedXmlText(_headerFooter.OddFooter, _skipInvalidCharacters).Append("</oddFooter>\n");
+                _contentBuffer.Append("<oddFooter>").AppendEscapedXmlText(_headerFooter.OddFooter, _skipInvalidCharacters).Append("</oddFooter>\n");
             if (_headerFooter.EvenHeader != null)
-                _streamWriter.Append("<evenHeader>").AppendEscapedXmlText(_headerFooter.EvenHeader, _skipInvalidCharacters).Append("</evenHeader>\n");
+                _contentBuffer.Append("<evenHeader>").AppendEscapedXmlText(_headerFooter.EvenHeader, _skipInvalidCharacters).Append("</evenHeader>\n");
             if (_headerFooter.EvenFooter != null)
-                _streamWriter.Append("<evenFooter>").AppendEscapedXmlText(_headerFooter.EvenFooter, _skipInvalidCharacters).Append("</evenFooter>\n");
+                _contentBuffer.Append("<evenFooter>").AppendEscapedXmlText(_headerFooter.EvenFooter, _skipInvalidCharacters).Append("</evenFooter>\n");
             if (_headerFooter.FirstHeader != null)
-                _streamWriter.Append("<firstHeader>").AppendEscapedXmlText(_headerFooter.FirstHeader, _skipInvalidCharacters).Append("</firstHeader>\n");
+                _contentBuffer.Append("<firstHeader>").AppendEscapedXmlText(_headerFooter.FirstHeader, _skipInvalidCharacters).Append("</firstHeader>\n");
             if (_headerFooter.FirstFooter != null)
-                _streamWriter.Append("<firstFooter>").AppendEscapedXmlText(_headerFooter.FirstFooter, _skipInvalidCharacters).Append("</firstFooter>\n");
-            _streamWriter.Write("</headerFooter>\n");
+                _contentBuffer.Append("<firstFooter>").AppendEscapedXmlText(_headerFooter.FirstFooter, _skipInvalidCharacters).Append("</firstFooter>\n");
+            _contentBuffer.Write("</headerFooter>\n");
         }
 
         private void WritePageBreaks()
         {
             if (_pageBreakRowNumbers.Count > 0)
             {
-                _streamWriter.Write($"<rowBreaks count=\"{_pageBreakRowNumbers.Count}\" manualBreakCount=\"{_pageBreakRowNumbers.Count}\">\n");
+                _contentBuffer.Write($"<rowBreaks count=\"{_pageBreakRowNumbers.Count}\" manualBreakCount=\"{_pageBreakRowNumbers.Count}\">\n");
                 foreach (var i in _pageBreakRowNumbers.OrderBy(r => r))
-                    _streamWriter.Write($"<brk id=\"{i}\" max=\"{Limits.MaxColumnCount}\" man=\"1\"/>\n");
-                _streamWriter.Write("</rowBreaks>\n");
+                    _contentBuffer.Write($"<brk id=\"{i}\" max=\"{Limits.MaxColumnCount}\" man=\"1\"/>\n");
+                _contentBuffer.Write("</rowBreaks>\n");
             }
             if (_pageBreakColumnNumbers.Count > 0)
             {
-                _streamWriter.Write($"<colBreaks count=\"{_pageBreakColumnNumbers.Count}\" manualBreakCount=\"{_pageBreakColumnNumbers.Count}\">\n");
+                _contentBuffer.Write($"<colBreaks count=\"{_pageBreakColumnNumbers.Count}\" manualBreakCount=\"{_pageBreakColumnNumbers.Count}\">\n");
                 foreach (var i in _pageBreakColumnNumbers.OrderBy(c => c))
-                    _streamWriter.Write($"<brk id=\"{i}\" max=\"{Limits.MaxRowCount}\" man=\"1\"/>\n");
-                _streamWriter.Write("</colBreaks>\n");
+                    _contentBuffer.Write($"<brk id=\"{i}\" max=\"{Limits.MaxRowCount}\" man=\"1\"/>\n");
+                _contentBuffer.Write("</colBreaks>\n");
             }
         }
     }

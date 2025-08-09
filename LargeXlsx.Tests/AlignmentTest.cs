@@ -25,6 +25,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 using System.IO;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
@@ -35,6 +36,13 @@ namespace LargeXlsx.Tests;
 [TestFixture]
 public static class AlignmentTest
 {
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="alignment"></param>
+    /// <param name="expected"></param>
+    /// <returns></returns>
+    /// <remarks>See also <see cref="HorizontalAlignmentAsync(XlsxAlignment.Horizontal, ExcelHorizontalAlignment)"/></remarks>
     [TestCase(XlsxAlignment.Horizontal.General, ExcelHorizontalAlignment.General)]
     [TestCase(XlsxAlignment.Horizontal.Left, ExcelHorizontalAlignment.Left)]
     [TestCase(XlsxAlignment.Horizontal.Center, ExcelHorizontalAlignment.Center)]
@@ -49,6 +57,35 @@ public static class AlignmentTest
         using (var xlsxWriter = new XlsxWriter(stream))
             xlsxWriter.BeginWorksheet("Sheet 1").BeginRow()
                 .Write("Test", XlsxStyle.Default.With(new XlsxAlignment(horizontal: alignment)));
+        using (var package = new ExcelPackage(stream))
+            package.Workbook.Worksheets[0].Cells["A1"].Style.HorizontalAlignment.ShouldBe(expected);
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="alignment"></param>
+    /// <param name="expected"></param>
+    /// <returns></returns>
+    /// <remarks>See also <see cref="HorizontalAlignment(XlsxAlignment.Horizontal, ExcelHorizontalAlignment)"/></remarks>
+    [TestCase(XlsxAlignment.Horizontal.General, ExcelHorizontalAlignment.General)]
+    [TestCase(XlsxAlignment.Horizontal.Left, ExcelHorizontalAlignment.Left)]
+    [TestCase(XlsxAlignment.Horizontal.Center, ExcelHorizontalAlignment.Center)]
+    [TestCase(XlsxAlignment.Horizontal.Right, ExcelHorizontalAlignment.Right)]
+    [TestCase(XlsxAlignment.Horizontal.Fill, ExcelHorizontalAlignment.Fill)]
+    [TestCase(XlsxAlignment.Horizontal.Justify, ExcelHorizontalAlignment.Justify)]
+    [TestCase(XlsxAlignment.Horizontal.CenterContinuous, ExcelHorizontalAlignment.CenterContinuous)]
+    [TestCase(XlsxAlignment.Horizontal.Distributed, ExcelHorizontalAlignment.Distributed)]
+    public static async Task HorizontalAlignmentAsync(XlsxAlignment.Horizontal alignment, ExcelHorizontalAlignment expected)
+    {
+        using var stream = new MemoryStream();
+        using (var xlsxWriter = new XlsxWriter(stream))
+        {
+            await xlsxWriter.BeginWorksheetAsync("Sheet 1");
+            await xlsxWriter.BeginRowAsync();
+            await xlsxWriter.WriteAsync("Test", XlsxStyle.Default.With(new XlsxAlignment(horizontal: alignment)));
+        }
+
         using (var package = new ExcelPackage(stream))
             package.Workbook.Worksheets[0].Cells["A1"].Style.HorizontalAlignment.ShouldBe(expected);
     }

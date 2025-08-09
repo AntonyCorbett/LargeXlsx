@@ -124,7 +124,7 @@ namespace LargeXlsx
             }
             else
             {
-                await _streamWriter.WriteAsync(s);
+                await _streamWriter.WriteAsync(s).ConfigureAwait(false);
             }
 
             if (splitRow > 0 || splitColumn > 0)
@@ -135,7 +135,7 @@ namespace LargeXlsx
                 }
                 else
                 {
-                    await FreezePanesAsync(splitRow, splitColumn);
+                    await FreezePanesAsync(splitRow, splitColumn).ConfigureAwait(false);
                 }
             }
 
@@ -149,9 +149,9 @@ namespace LargeXlsx
             }
             else
             {
-                await _streamWriter.WriteAsync(closingXml);
-                await WriteColumnsAsync(columns);
-                await _streamWriter.WriteAsync(closingXml2);
+                await _streamWriter.WriteAsync(closingXml).ConfigureAwait(false);
+                await WriteColumnsAsync(columns).ConfigureAwait(false);
+                await _streamWriter.WriteAsync(closingXml2).ConfigureAwait(false);
             }
         }
 
@@ -219,7 +219,8 @@ namespace LargeXlsx
                 state);
 
             await worksheet.InitializeCoreAsync(
-                showGridLines, showHeaders, rightToLeft, splitRow, splitColumn, columns, sync: false);
+                showGridLines, showHeaders, rightToLeft, splitRow, splitColumn, columns, sync: false)
+                .ConfigureAwait(false);
 
             return worksheet;
         }
@@ -269,27 +270,27 @@ namespace LargeXlsx
 
         public async Task BeginRowAsync(double? height, bool hidden, XlsxStyle style)
         {
-            await CloseLastRowAsync();
+            await CloseLastRowAsync().ConfigureAwait(false);
             if (CurrentRowNumber == Limits.MaxRowCount)
                 throw new InvalidOperationException($"A worksheet can contain at most {Limits.MaxRowCount} rows ({CurrentRowNumber + 1} attempted)");
             CurrentRowNumber++;
             _stringedCurrentRowNumber = null;
             CurrentColumnNumber = 1;
-            await _streamWriter.WriteAsync("<row");
+            await _streamWriter.WriteAsync("<row").ConfigureAwait(false);
             if (_requireCellReferences || _needsRef)
             {
-                await _streamWriter.WriteAsync(" r=\"");
-                await WriteCurrentRowNumberAsync();
-                await _streamWriter.WriteAsync("\"");
+                await _streamWriter.WriteAsync(" r=\"").ConfigureAwait(false);
+                await WriteCurrentRowNumberAsync().ConfigureAwait(false);
+                await _streamWriter.WriteAsync("\"").ConfigureAwait(false);
                 _needsRef = false;
             }
             if (height.HasValue)
-                await _streamWriter.WriteAsync($" ht=\"{height}\" customHeight=\"1\"");
+                await _streamWriter.WriteAsync($" ht=\"{height}\" customHeight=\"1\"").ConfigureAwait(false);
             if (hidden)
-                await _streamWriter.WriteAsync(" hidden=\"1\"");
+                await _streamWriter.WriteAsync(" hidden=\"1\"").ConfigureAwait(false);
             if (style != null)
-                await _streamWriter.WriteAsync($" s=\"{_stylesheet.ResolveStyleId(style)}\" customFormat=\"1\"");
-            await _streamWriter.WriteAsync(">\n");
+                await _streamWriter.WriteAsync($" s=\"{_stylesheet.ResolveStyleId(style)}\" customFormat=\"1\"").ConfigureAwait(false);
+            await _streamWriter.WriteAsync(">\n").ConfigureAwait(false);
         }
 
         public void SkipRows(int rowCount)
@@ -303,7 +304,7 @@ namespace LargeXlsx
 
         public async Task SkipRowsAsync(int rowCount)
         {
-            await CloseLastRowAsync();
+            await CloseLastRowAsync().ConfigureAwait(false);
             _needsRef = true;
             if (CurrentRowNumber + rowCount > Limits.MaxRowCount)
                 throw new InvalidOperationException($"A worksheet can contain at most {Limits.MaxRowCount} rows ({CurrentRowNumber + rowCount} attempted)");
@@ -340,10 +341,10 @@ namespace LargeXlsx
             for (var i = 0; i < repeatCount; i++)
             {
                 // <c r="{0}{1}" s="{2}"/>
-                await _streamWriter.WriteAsync("<c");
-                await WriteCellRefAsync();
-                await WriteStyleAsync(styleId);
-                await _streamWriter.WriteAsync("/>\n");
+                await _streamWriter.WriteAsync("<c").ConfigureAwait(false);
+                await WriteCellRefAsync().ConfigureAwait(false);
+                await WriteStyleAsync(styleId).ConfigureAwait(false);
+                await _streamWriter.WriteAsync("/>\n").ConfigureAwait(false);
                 CurrentColumnNumber++;
             }
         }
@@ -373,19 +374,19 @@ namespace LargeXlsx
         {
             if (value == null)
             {
-                await WriteAsync(style, 1);
+                await WriteAsync(style, 1).ConfigureAwait(false);
                 return;
             }
             EnsureRow();
             // <c r="{0}{1}" s="{2}" t="inlineStr"><is><t xml:space="preserve">{3}</t></is></c>
-            await _streamWriter.WriteAsync("<c");
-            await WriteCellRefAsync();
-            await WriteStyleAsync(style);
-            await _streamWriter.WriteAsync(" t=\"inlineStr\"><is><t");
-            await _streamWriter.AddSpacePreserveIfNeededAsync(value);
-            await _streamWriter.WriteAsync(">");
-            await _streamWriter.AppendEscapedXmlTextAsync(value, _skipInvalidCharacters);
-            await _streamWriter.WriteAsync("</t></is></c>\n");
+            await _streamWriter.WriteAsync("<c").ConfigureAwait(false);
+            await WriteCellRefAsync().ConfigureAwait(false);
+            await WriteStyleAsync(style).ConfigureAwait(false);
+            await _streamWriter.WriteAsync(" t=\"inlineStr\"><is><t").ConfigureAwait(false);
+            await _streamWriter.AddSpacePreserveIfNeededAsync(value).ConfigureAwait(false);
+            await _streamWriter.WriteAsync(">").ConfigureAwait(false);
+            await _streamWriter.AppendEscapedXmlTextAsync(value, _skipInvalidCharacters).ConfigureAwait(false);
+            await _streamWriter.WriteAsync("</t></is></c>\n").ConfigureAwait(false);
 
             CurrentColumnNumber++;
         }
@@ -405,12 +406,12 @@ namespace LargeXlsx
         {
             EnsureRow();
             // <c r="{0}{1}" s="{2}"><v>{3}</v></c>
-            await _streamWriter.WriteAsync("<c");
-            await WriteCellRefAsync();
-            await WriteStyleAsync(style);
-            await _streamWriter.WriteAsync("><v>");
-            await _streamWriter.WriteAsync(value);
-            await _streamWriter.WriteAsync("</v></c>\n");
+            await _streamWriter.WriteAsync("<c").ConfigureAwait(false);
+            await WriteCellRefAsync().ConfigureAwait(false);
+            await WriteStyleAsync(style).ConfigureAwait(false);
+            await _streamWriter.WriteAsync("><v>").ConfigureAwait(false);
+            await _streamWriter.WriteAsync(value).ConfigureAwait(false);
+            await _streamWriter.WriteAsync("</v></c>\n").ConfigureAwait(false);
             CurrentColumnNumber++;
         }
 
@@ -429,12 +430,12 @@ namespace LargeXlsx
         {
             EnsureRow();
             // <c r="{0}{1}" s="{2}"><v>{3}</v></c>
-            await _streamWriter.WriteAsync("<c");
-            await WriteCellRefAsync();
-            await WriteStyleAsync(style);
-            await _streamWriter.WriteAsync("><v>");
-            await _streamWriter.WriteAsync(value);
-            await _streamWriter.WriteAsync("</v></c>\n");
+            await _streamWriter.WriteAsync("<c").ConfigureAwait(false);
+            await WriteCellRefAsync().ConfigureAwait(false);
+            await WriteStyleAsync(style).ConfigureAwait(false);
+            await _streamWriter.WriteAsync("><v>").ConfigureAwait(false);
+            await _streamWriter.WriteAsync(value).ConfigureAwait(false);
+            await _streamWriter.WriteAsync("</v></c>\n").ConfigureAwait(false);
             CurrentColumnNumber++;
         }
 
@@ -453,12 +454,12 @@ namespace LargeXlsx
         {
             EnsureRow();
             // <c r="{0}{1}" s="{2}"><v>{3}</v></c>
-            await _streamWriter.WriteAsync("<c");
-            await WriteCellRefAsync();
-            await WriteStyleAsync(style);
-            await _streamWriter.WriteAsync("><v>");
-            await _streamWriter.WriteAsync(value);
-            await _streamWriter.WriteAsync("</v></c>\n");
+            await _streamWriter.WriteAsync("<c").ConfigureAwait(false);
+            await WriteCellRefAsync().ConfigureAwait(false);
+            await WriteStyleAsync(style).ConfigureAwait(false);
+            await _streamWriter.WriteAsync("><v>").ConfigureAwait(false);
+            await _streamWriter.WriteAsync(value).ConfigureAwait(false);
+            await _streamWriter.WriteAsync("</v></c>\n").ConfigureAwait(false);
             CurrentColumnNumber++;
         }
 
@@ -480,12 +481,12 @@ namespace LargeXlsx
         {
             EnsureRow();
             // <c r="{0}{1}" s="{2}" t="b"><v>{3}</v></c>
-            await _streamWriter.WriteAsync("<c");
-            await WriteCellRefAsync();
-            await WriteStyleAsync(style);
-            await _streamWriter.WriteAsync(" t=\"b\"><v>");
-            await _streamWriter.WriteAsync(Util.BoolToIntString(value));
-            await _streamWriter.WriteAsync("</v></c>\n");
+            await _streamWriter.WriteAsync("<c").ConfigureAwait(false);
+            await WriteCellRefAsync().ConfigureAwait(false);
+            await WriteStyleAsync(style).ConfigureAwait(false);
+            await _streamWriter.WriteAsync(" t=\"b\"><v>").ConfigureAwait(false);
+            await _streamWriter.WriteAsync(Util.BoolToIntString(value)).ConfigureAwait(false);
+            await _streamWriter.WriteAsync("</v></c>\n").ConfigureAwait(false);
             CurrentColumnNumber++;
         }
 
@@ -512,19 +513,19 @@ namespace LargeXlsx
         {
             // <c r="{0}{1}" s="{2}" t="str"><f>{3}</f><v>{4}</v></c>
             EnsureRow();
-            await _streamWriter.WriteAsync("<c");
-            await WriteCellRefAsync();
-            await WriteStyleAsync(style);
-            await _streamWriter.WriteAsync(" t=\"str\"><f>");
-            await _streamWriter.AppendEscapedXmlTextAsync(formula, _skipInvalidCharacters);
-            await _streamWriter.WriteAsync("</f>");
+            await _streamWriter.WriteAsync("<c").ConfigureAwait(false);
+            await WriteCellRefAsync().ConfigureAwait(false);
+            await WriteStyleAsync(style).ConfigureAwait(false);
+            await _streamWriter.WriteAsync(" t=\"str\"><f>").ConfigureAwait(false);
+            await _streamWriter.AppendEscapedXmlTextAsync(formula, _skipInvalidCharacters).ConfigureAwait(false);
+            await _streamWriter.WriteAsync("</f>").ConfigureAwait(false);
             if (result != null)
             {
-                await _streamWriter.WriteAsync("<v>");
-                await _streamWriter.AppendEscapedXmlTextAsync(result.ToString(CultureInfo.InvariantCulture), _skipInvalidCharacters);
-                await _streamWriter.WriteAsync("</v>");
+                await _streamWriter.WriteAsync("<v>").ConfigureAwait(false);
+                await _streamWriter.AppendEscapedXmlTextAsync(result.ToString(CultureInfo.InvariantCulture), _skipInvalidCharacters).ConfigureAwait(false);
+                await _streamWriter.WriteAsync("</v>").ConfigureAwait(false);
             }
-            await _streamWriter.WriteAsync("</c>\n");
+            await _streamWriter.WriteAsync("</c>\n").ConfigureAwait(false);
             CurrentColumnNumber++;
         }
 
@@ -546,12 +547,12 @@ namespace LargeXlsx
         {
             EnsureRow();
             // <c r="{0}{1}" s="{2}" t="s"><v>{3}</v></c>
-            await _streamWriter.WriteAsync("<c");
-            await WriteCellRefAsync();
-            await WriteStyleAsync(style);
-            await _streamWriter.WriteAsync(" t=\"s\"><v>");
-            await _streamWriter.WriteAsync(_sharedStringTable.ResolveStringId(value));
-            await _streamWriter.WriteAsync("</v></c>\n");
+            await _streamWriter.WriteAsync("<c").ConfigureAwait(false);
+            await WriteCellRefAsync().ConfigureAwait(false);
+            await WriteStyleAsync(style).ConfigureAwait(false);
+            await _streamWriter.WriteAsync(" t=\"s\"><v>").ConfigureAwait(false);
+            await _streamWriter.WriteAsync(_sharedStringTable.ResolveStringId(value)).ConfigureAwait(false);
+            await _streamWriter.WriteAsync("</v></c>\n").ConfigureAwait(false);
             CurrentColumnNumber++;
         }
 
@@ -640,10 +641,10 @@ namespace LargeXlsx
         {
             if (_requireCellReferences || _needsRef)
             {
-                await _streamWriter.WriteAsync(" r=\"");
-                await _streamWriter.WriteAsync(Util.GetColumnName(CurrentColumnNumber));
-                await WriteCurrentRowNumberAsync();
-                await _streamWriter.WriteAsync("\"");
+                await _streamWriter.WriteAsync(" r=\"").ConfigureAwait(false);
+                await _streamWriter.WriteAsync(Util.GetColumnName(CurrentColumnNumber)).ConfigureAwait(false);
+                await WriteCurrentRowNumberAsync().ConfigureAwait(false);
+                await _streamWriter.WriteAsync("\"").ConfigureAwait(false);
                 _needsRef = false;
             }
         }
@@ -659,7 +660,7 @@ namespace LargeXlsx
         {
             if (_stringedCurrentRowNumber == null)
                 _stringedCurrentRowNumber = CurrentRowNumber.ToString();
-            await _streamWriter.WriteAsync(_stringedCurrentRowNumber);
+            await _streamWriter.WriteAsync(_stringedCurrentRowNumber).ConfigureAwait(false);
         }
 
 
@@ -673,9 +674,9 @@ namespace LargeXlsx
         {
             if (styleId != 0)
             {
-                await _streamWriter.WriteAsync(" s=\"");
-                await _streamWriter.WriteAsync(styleId);
-                await _streamWriter.WriteAsync("\"");
+                await _streamWriter.WriteAsync(" s=\"").ConfigureAwait(false);
+                await _streamWriter.WriteAsync(styleId).ConfigureAwait(false);
+                await _streamWriter.WriteAsync("\"").ConfigureAwait(false);
             }
         }
 
@@ -709,7 +710,7 @@ namespace LargeXlsx
         {
             if (CurrentColumnNumber > 0)
             {
-                await _streamWriter.WriteAsync("</row>\n");
+                await _streamWriter.WriteAsync("</row>\n").ConfigureAwait(false);
                 CurrentColumnNumber = 0;
             }
         }
@@ -743,17 +744,20 @@ namespace LargeXlsx
             if (fromRow > 0 && fromColumn > 0)
             {
                 await _streamWriter.WriteAsync($"<pane xSplit=\"{fromColumn}\" ySplit=\"{fromRow}\" topLeftCell=\"{topLeftCell}\" activePane=\"bottomRight\" state=\"frozen\"/>"
-                                    + $"<selection pane=\"bottomRight\" activeCell=\"{topLeftCell}\" sqref=\"{topLeftCell}\"/>\n");
+                                    + $"<selection pane=\"bottomRight\" activeCell=\"{topLeftCell}\" sqref=\"{topLeftCell}\"/>\n")
+                    .ConfigureAwait(false);
             }
             else if (fromRow > 0)
             {
                 await _streamWriter.WriteAsync($"<pane ySplit=\"{fromRow}\" topLeftCell=\"{topLeftCell}\" activePane=\"bottomLeft\" state=\"frozen\"/>"
-                                    + $"<selection pane=\"bottomLeft\" activeCell=\"{topLeftCell}\" sqref=\"{topLeftCell}\"/>\n");
+                                    + $"<selection pane=\"bottomLeft\" activeCell=\"{topLeftCell}\" sqref=\"{topLeftCell}\"/>\n")
+                    .ConfigureAwait(false);
             }
             else if (fromColumn > 0)
             {
                 await _streamWriter.WriteAsync($"<pane xSplit=\"{fromColumn}\" topLeftCell=\"{topLeftCell}\" activePane=\"topRight\" state=\"frozen\"/>"
-                                    + $"<selection pane=\"topRight\" activeCell=\"{topLeftCell}\" sqref=\"{topLeftCell}\"/>\n");
+                                    + $"<selection pane=\"topRight\" activeCell=\"{topLeftCell}\" sqref=\"{topLeftCell}\"/>\n")
+                    .ConfigureAwait(false);
             }
         }
 
@@ -794,20 +798,20 @@ namespace LargeXlsx
                 {
                     if (!colsWritten)
                     {
-                        await _streamWriter.WriteAsync("<cols>");
+                        await _streamWriter.WriteAsync("<cols>").ConfigureAwait(false);
                         colsWritten = true;
                     }
-                    await _streamWriter.WriteAsync($"<col min=\"{columnIndex}\" max=\"{columnIndex + column.Count - 1}\"");
-                    if (column.Width.HasValue) await _streamWriter.WriteAsync($" width=\"{column.Width.Value}\"");
-                    if (column.Hidden) await _streamWriter.WriteAsync(" hidden=\"1\"");
-                    if (column.Width.HasValue) await _streamWriter.WriteAsync(" customWidth=\"1\"");
-                    if (column.Style != null) await _streamWriter.WriteAsync($" style=\"{_stylesheet.ResolveStyleId(column.Style)}\"");
-                    await _streamWriter.WriteAsync("/>\n");
+                    await _streamWriter.WriteAsync($"<col min=\"{columnIndex}\" max=\"{columnIndex + column.Count - 1}\"").ConfigureAwait(false);
+                    if (column.Width.HasValue) await _streamWriter.WriteAsync($" width=\"{column.Width.Value}\"").ConfigureAwait(false);
+                    if (column.Hidden) await _streamWriter.WriteAsync(" hidden=\"1\"").ConfigureAwait(false);
+                    if (column.Width.HasValue) await _streamWriter.WriteAsync(" customWidth=\"1\"").ConfigureAwait(false);
+                    if (column.Style != null) await _streamWriter.WriteAsync($" style=\"{_stylesheet.ResolveStyleId(column.Style)}\"").ConfigureAwait(false);
+                    await _streamWriter.WriteAsync("/>\n").ConfigureAwait(false);
                 }
                 columnIndex += column.Count;
             }
             if (colsWritten)
-                await _streamWriter.WriteAsync("</cols>\n");
+                await _streamWriter.WriteAsync("</cols>\n").ConfigureAwait(false);
         }
 
         // no async version needed (yet).

@@ -289,7 +289,7 @@ namespace LargeXlsx
                 showGridLines: showGridLines,
                 showHeaders: showHeaders,
                 requireCellReferences: _requireCellReferences,
-                skipInvalidCharacters: _skipInvalidCharacters);
+                skipInvalidCharacters: _skipInvalidCharacters).ConfigureAwait(false);
             _worksheets.Add(_currentWorksheet);
             return this;
         }
@@ -316,7 +316,7 @@ namespace LargeXlsx
         public async Task<XlsxWriter> SkipRowsAsync(int rowCount)
         {
             CheckInWorksheet();
-            await _currentWorksheet.SkipRowsAsync(rowCount);
+            await _currentWorksheet.SkipRowsAsync(rowCount).ConfigureAwait(false);
             return this;
         }
 
@@ -346,7 +346,7 @@ namespace LargeXlsx
         public async Task<XlsxWriter> BeginRowAsync(double? height = null, bool hidden = false, XlsxStyle style = null)
         {
             CheckInWorksheet();
-            await _currentWorksheet.BeginRowAsync(height, hidden, style);
+            await _currentWorksheet.BeginRowAsync(height, hidden, style).ConfigureAwait(false);
             return this;
         }
 
@@ -393,15 +393,15 @@ namespace LargeXlsx
             if (columnSpan == 1)
             {
                 CheckInWorksheet();
-                await _currentWorksheet.WriteAsync(style ?? DefaultStyle, repeatCount);
+                await _currentWorksheet.WriteAsync(style ?? DefaultStyle, repeatCount).ConfigureAwait(false);
                 return this;
             }
 
             for (var i = 0; i < repeatCount; i++)
             {
                 var writer = AddMergedCell(1, columnSpan);
-                await writer.WriteAsync(style, 1);
-                await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+                await writer.WriteAsync(style, 1).ConfigureAwait(false);
+                await writer.WriteAsync(style, repeatCount: columnSpan - 1).ConfigureAwait(false);
             }
             return this;
         }
@@ -439,13 +439,13 @@ namespace LargeXlsx
             if (columnSpan == 1)
             {
                 CheckInWorksheet();
-                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle);
+                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle).ConfigureAwait(false);
                 return this;
             }
 
             var writer = AddMergedCell(1, columnSpan);
-            await writer.WriteAsync(value, style, 1);
-            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+            await writer.WriteAsync(value, style, 1).ConfigureAwait(false);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1).ConfigureAwait(false);
 
             return writer;
         }
@@ -483,13 +483,13 @@ namespace LargeXlsx
             if (columnSpan == 1)
             {
                 CheckInWorksheet();
-                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle);
+                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle).ConfigureAwait(false);
                 return this;
             }
 
             var writer = AddMergedCell(1, columnSpan);
-            await writer.WriteAsync(value, style, 1);
-            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+            await writer.WriteAsync(value, style, 1).ConfigureAwait(false);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1).ConfigureAwait(false);
 
             return writer;
         }
@@ -527,13 +527,13 @@ namespace LargeXlsx
             if (columnSpan == 1)
             {
                 CheckInWorksheet();
-                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle);
+                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle).ConfigureAwait(false);
                 return this;
             }
 
             var writer = AddMergedCell(1, columnSpan);
-            await writer.WriteAsync(value, style, 1);
-            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+            await writer.WriteAsync(value, style, 1).ConfigureAwait(false);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1).ConfigureAwait(false);
 
             return writer;
         }
@@ -571,13 +571,13 @@ namespace LargeXlsx
             if (columnSpan == 1)
             {
                 CheckInWorksheet();
-                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle);
+                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle).ConfigureAwait(false);
                 return this;
             }
 
             var writer = AddMergedCell(1, columnSpan);
-            await writer.WriteAsync(value, style, 1);
-            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+            await writer.WriteAsync(value, style, 1).ConfigureAwait(false);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1).ConfigureAwait(false);
 
             return writer;
         }
@@ -642,13 +642,13 @@ namespace LargeXlsx
             if (columnSpan == 1)
             {
                 CheckInWorksheet();
-                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle);
+                await _currentWorksheet.WriteAsync(value, style ?? DefaultStyle).ConfigureAwait(false);
                 return this;
             }
 
             var writer = AddMergedCell(1, columnSpan);
-            await writer.WriteAsync(value, style, 1);
-            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+            await writer.WriteAsync(value, style, 1).ConfigureAwait(false);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1).ConfigureAwait(false);
 
             return writer;
         }
@@ -690,13 +690,13 @@ namespace LargeXlsx
             {
                 CheckInWorksheet();
                 if (result == null) _hasFormulasWithoutResult = true;
-                await _currentWorksheet.WriteFormulaAsync(formula, style ?? DefaultStyle, result);
+                await _currentWorksheet.WriteFormulaAsync(formula, style ?? DefaultStyle, result).ConfigureAwait(false);
                 return this;
             }
 
             var writer = AddMergedCell(1, columnSpan);
-            await writer.WriteFormulaAsync(formula, style, 1, result);
-            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+            await writer.WriteFormulaAsync(formula, style, 1, result).ConfigureAwait(false);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1).ConfigureAwait(false);
 
             return writer;
         }
@@ -734,13 +734,13 @@ namespace LargeXlsx
             if (columnSpan == 1)
             {
                 CheckInWorksheet();
-                await _currentWorksheet.WriteSharedStringAsync(value, style ?? DefaultStyle);
+                await _currentWorksheet.WriteSharedStringAsync(value, style ?? DefaultStyle).ConfigureAwait(false);
                 return this;
             }
 
             var writer = AddMergedCell(1, columnSpan);
-            await writer.WriteSharedStringAsync(value, style, 1);
-            await writer.WriteAsync(style, repeatCount: columnSpan - 1);
+            await writer.WriteSharedStringAsync(value, style, 1).ConfigureAwait(false);
+            await writer.WriteAsync(style, repeatCount: columnSpan - 1).ConfigureAwait(false);
 
             return writer;
         }

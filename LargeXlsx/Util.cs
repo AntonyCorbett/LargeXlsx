@@ -120,15 +120,15 @@ namespace LargeXlsx
                 var c = value[i];
                 if (XmlConvert.IsXmlChar(c))
                 {
-                    if (c == '<') await textWriter.WriteAsync("&lt;");
-                    else if (c == '>') await textWriter.WriteAsync("&gt;");
-                    else if (c == '&') await textWriter.WriteAsync("&amp;");
-                    else await textWriter.WriteAsync(c);
+                    if (c == '<') await textWriter.WriteAsync("&lt;").ConfigureAwait(false);
+                    else if (c == '>') await textWriter.WriteAsync("&gt;").ConfigureAwait(false);
+                    else if (c == '&') await textWriter.WriteAsync("&amp;").ConfigureAwait(false);
+                    else await textWriter.WriteAsync(c).ConfigureAwait(false);
                 }
                 else if (i < value.Length - 1 && XmlConvert.IsXmlSurrogatePair(value[i + 1], c))
                 {
-                    await textWriter.WriteAsync(c);
-                    await textWriter.WriteAsync(value[i + 1]);
+                    await textWriter.WriteAsync(c).ConfigureAwait(false);
+                    await textWriter.WriteAsync(value[i + 1]).ConfigureAwait(false);
                     i++;
                 }
                 else if (!skipInvalidCharacters)
@@ -189,17 +189,17 @@ namespace LargeXlsx
                 var c = value[i];
                 if (XmlConvert.IsXmlChar(c))
                 {
-                    if (c == '<') await textWriter.WriteAsync("&lt;");
-                    else if (c == '>') await textWriter.WriteAsync("&gt;");
-                    else if (c == '&') await textWriter.WriteAsync("&amp;");
-                    else if (c == '\'') await textWriter.WriteAsync("&apos;");
-                    else if (c == '"') await textWriter.WriteAsync("&quot;");
-                    else await textWriter.WriteAsync(c);
+                    if (c == '<') await textWriter.WriteAsync("&lt;").ConfigureAwait(false);
+                    else if (c == '>') await textWriter.WriteAsync("&gt;").ConfigureAwait(false);
+                    else if (c == '&') await textWriter.WriteAsync("&amp;").ConfigureAwait(false);
+                    else if (c == '\'') await textWriter.WriteAsync("&apos;").ConfigureAwait(false);
+                    else if (c == '"') await textWriter.WriteAsync("&quot;").ConfigureAwait(false);
+                    else await textWriter.WriteAsync(c).ConfigureAwait(false);
                 }
                 else if (i < value.Length - 1 && XmlConvert.IsXmlSurrogatePair(value[i + 1], c))
                 {
-                    await textWriter.WriteAsync(c);
-                    await textWriter.WriteAsync(value[i + 1]);
+                    await textWriter.WriteAsync(c).ConfigureAwait(false);
+                    await textWriter.WriteAsync(value[i + 1]).ConfigureAwait(false);
                     i++;
                 }
                 else if (!skipInvalidCharacters)
@@ -296,7 +296,7 @@ namespace LargeXlsx
         public static async Task AddSpacePreserveIfNeededAsync(this TextWriter textWriter, string value)
         {
             if (value.Length > 0 && (XmlConvert.IsWhitespaceChar(value[0]) || XmlConvert.IsWhitespaceChar(value[value.Length - 1])))
-                await textWriter.WriteAsync(" xml:space=\"preserve\"");
+                await textWriter.WriteAsync(" xml:space=\"preserve\"").ConfigureAwait(false);
         }
 
         public static Task WriteAsync(this TextWriter textWriter, double value)

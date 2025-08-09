@@ -96,17 +96,18 @@ namespace LargeXlsx
             {
                 await streamWriter.WriteLineAsync(
                     "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" + 
-                    "<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+                    "<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">")
+                    .ConfigureAwait(false);
 
                 foreach (var si in _stringItems.OrderBy(s => s.Value))
                 {
-                    await streamWriter.WriteAsync("<si><t");
-                    await streamWriter.AddSpacePreserveIfNeededAsync(si.Key);
-                    await streamWriter.WriteAsync(">");
-                    await streamWriter.AppendEscapedXmlTextAsync(si.Key, _skipInvalidCharacters);
-                    await streamWriter.WriteAsync("</t></si>\n");
+                    await streamWriter.WriteAsync("<si><t").ConfigureAwait(false);
+                    await streamWriter.AddSpacePreserveIfNeededAsync(si.Key).ConfigureAwait(false);
+                    await streamWriter.WriteAsync(">").ConfigureAwait(false);
+                    await streamWriter.AppendEscapedXmlTextAsync(si.Key, _skipInvalidCharacters).ConfigureAwait(false);
+                    await streamWriter.WriteAsync("</t></si>\n").ConfigureAwait(false);
                 }
-                await streamWriter.WriteLineAsync("</sst>");
+                await streamWriter.WriteLineAsync("</sst>").ConfigureAwait(false);
             }
         }
     }

@@ -28,9 +28,9 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using LargeXlsx;
-using SharpCompress.Compressors.Deflate;
 
 namespace Examples
 {
@@ -61,7 +61,7 @@ namespace Examples
             using (var stream = new FileStream($"{nameof(StyledLarge)}_{requireCellReferences}.xlsx", FileMode.Create,
                        FileAccess.Write))
             {
-                using (var xlsxWriter = new XlsxWriter(stream, compressionLevel: CompressionLevel.Level3,
+                using (var xlsxWriter = new XlsxWriter(stream, compressionLevel: CompressionLevel.Fastest,
                            requireCellReferences: requireCellReferences))
                 {
                     var headerStyle = new XlsxStyle(

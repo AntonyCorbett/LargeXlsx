@@ -463,7 +463,7 @@ namespace LargeXlsx.Tests
         {
             using (var stream = new MemoryStream())
             {
-                using (var xlsxWriter = new XlsxWriter(stream, useZip64: useZip64))
+                using (var xlsxWriter = new XlsxWriter(stream))
                 {
                     xlsxWriter
                         .BeginWorksheet("Sheet1")

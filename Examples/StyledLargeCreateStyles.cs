@@ -61,7 +61,7 @@ namespace Examples
             using (var stream = new FileStream($"{nameof(StyledLargeCreateStyles)}_{requireCellReferences}.xlsx",
                        FileMode.Create, FileAccess.Write))
             {
-                using (var xlsxWriter = new XlsxWriter(stream, requireCellReferences: requireCellReferences, compressionLevel: CompressionLevel.Fastest))
+                using (var xlsxWriter = new XlsxWriter(stream, requireCellReferences: requireCellReferences, compressionLevel: CompressionLevel.Optimal))
                 {
                     var colors = Enumerable.Repeat(0, 100)
                         .Select(_ => Color.FromArgb(rnd.Next(256), rnd.Next(256), rnd.Next(256))).ToList();

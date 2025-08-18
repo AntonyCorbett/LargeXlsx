@@ -37,7 +37,7 @@ namespace Examples
             using (var stream = new FileStream($"{nameof(Zip64Small)}.xlsx", FileMode.Create, FileAccess.Write))
             {
                 using (var xlsxWriter =
-                       new XlsxWriter(stream, compressionLevel: CompressionLevel.Fastest))
+                       new XlsxWriter(stream, compressionLevel: CompressionLevel.Optimal))
                 {
                     xlsxWriter.BeginWorksheet("Sheet1").BeginRow().Write("A1").Write("B1").BeginRow().Write("A2")
                         .Write("B2");

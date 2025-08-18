@@ -61,7 +61,7 @@ namespace Examples
             using (var stream = new FileStream($"{nameof(StyledLarge)}_{requireCellReferences}.xlsx", FileMode.Create,
                        FileAccess.Write))
             {
-                using (var xlsxWriter = new XlsxWriter(stream, compressionLevel: CompressionLevel.Fastest,
+                using (var xlsxWriter = new XlsxWriter(stream, compressionLevel: CompressionLevel.Optimal,
                            requireCellReferences: requireCellReferences))
                 {
                     var headerStyle = new XlsxStyle(

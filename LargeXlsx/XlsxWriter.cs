@@ -248,7 +248,7 @@ namespace LargeXlsx
             return this;
         }
 
-        public XlsxWriter BeginRow(double? height = null, bool hidden = false, XlsxStyle style = null)
+        public XlsxWriter BeginRow(double? height = null, bool hidden = false, XlsxStyle? style = null)
         {
             CheckInWorksheet();
             _currentWorksheet.BeginRow(height, hidden, style);
@@ -262,7 +262,7 @@ namespace LargeXlsx
             return this;
         }
 
-        public XlsxWriter Write(XlsxStyle style = null, int columnSpan = 1, int repeatCount = 1)
+        public XlsxWriter Write(XlsxStyle? style = null, int columnSpan = 1, int repeatCount = 1)
         {
             if (columnSpan == 1)
             {
@@ -276,7 +276,7 @@ namespace LargeXlsx
             return this;
         }
 
-        public XlsxWriter Write(string value, XlsxStyle style = null, int columnSpan = 1)
+        public XlsxWriter Write(string value, XlsxStyle? style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
             {
@@ -288,7 +288,7 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).Write(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
 
-        public XlsxWriter Write(double value, XlsxStyle style = null, int columnSpan = 1)
+        public XlsxWriter Write(double value, XlsxStyle? style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
             {
@@ -300,7 +300,7 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).Write(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
 
-        public XlsxWriter Write(decimal value, XlsxStyle style = null, int columnSpan = 1)
+        public XlsxWriter Write(decimal value, XlsxStyle? style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
             {
@@ -312,7 +312,7 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).Write(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
 
-        public XlsxWriter Write(int value, XlsxStyle style = null, int columnSpan = 1)
+        public XlsxWriter Write(int value, XlsxStyle? style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
             {
@@ -324,12 +324,12 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).Write(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
 
-        public XlsxWriter Write(DateTime value, XlsxStyle style = null, int columnSpan = 1)
+        public XlsxWriter Write(DateTime value, XlsxStyle? style = null, int columnSpan = 1)
         {
             return Write(Util.DateToDouble(value), style, columnSpan);
         }
 
-        public XlsxWriter Write(bool value, XlsxStyle style = null, int columnSpan = 1)
+        public XlsxWriter Write(bool value, XlsxStyle? style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
             {
@@ -341,7 +341,7 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).Write(value, style, 1).Write(style, repeatCount: columnSpan - 1);
         }
 
-        public XlsxWriter WriteFormula(string formula, XlsxStyle style = null, int columnSpan = 1, IConvertible result = null)
+        public XlsxWriter WriteFormula(string formula, XlsxStyle? style = null, int columnSpan = 1, IConvertible result = null)
         {
             if (columnSpan == 1)
             {
@@ -354,7 +354,7 @@ namespace LargeXlsx
             return AddMergedCell(1, columnSpan).WriteFormula(formula, style, 1, result).Write(style, repeatCount: columnSpan - 1);
         }
 
-        public XlsxWriter WriteSharedString(string value, XlsxStyle style = null, int columnSpan = 1)
+        public XlsxWriter WriteSharedString(string value, XlsxStyle? style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
             {

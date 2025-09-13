@@ -60,6 +60,8 @@ public static class AlignmentTest
     [TestCase(XlsxAlignment.Vertical.Distributed, ExcelVerticalAlignment.Distributed)]
     public static void VerticalAlignment(XlsxAlignment.Vertical alignment, ExcelVerticalAlignment expected)
     {
+        var al = XlsxStyle.Default.With(new XlsxAlignment(vertical: alignment));
+
         using var stream = new MemoryStream();
         using (var xlsxWriter = new XlsxWriter(stream))
             xlsxWriter.BeginWorksheet("Sheet 1").BeginRow()

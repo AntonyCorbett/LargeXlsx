@@ -25,11 +25,12 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 
 namespace LargeXlsx
 {
-    public class XlsxBorder : IEquatable<XlsxBorder>
+    public readonly struct XlsxBorder : IEquatable<XlsxBorder>
     {
         public enum Style
         {
@@ -49,7 +50,7 @@ namespace LargeXlsx
             SlantDashDot
         }
 
-        public class Line : IEquatable<Line>
+        public readonly struct Line : IEquatable<Line>
         {
             public Color Color { get; }
             public Style Style { get; }
@@ -63,51 +64,36 @@ namespace LargeXlsx
             #region Equality members
             public bool Equals(Line other)
             {
-                if (ReferenceEquals(null, other)) return false;
-                if (ReferenceEquals(this, other)) return true;
                 return Color.Equals(other.Color) && Style == other.Style;
             }
 
             public override bool Equals(object obj)
             {
-                if (ReferenceEquals(null, obj)) return false;
-                if (ReferenceEquals(this, obj)) return true;
-                if (obj.GetType() != this.GetType()) return false;
-                return Equals((Line)obj);
+                return obj is Line other && Equals(other);
             }
 
             public override int GetHashCode()
             {
-                unchecked
-                {
-                    return (Color.GetHashCode() * 397) ^ (int)Style;
-                }
-            }
-
-            public static bool operator ==(Line left, Line right)
-            {
-                return Equals(left, right);
-            }
-
-            public static bool operator !=(Line left, Line right)
-            {
-                return !Equals(left, right);
+                var hashCode = 1273383366;
+                hashCode = hashCode * -1521134295 + Color.GetHashCode();
+                hashCode = hashCode * -1521134295 + Style.GetHashCode();
+                return hashCode;
             }
             #endregion
         }
 
         public static readonly XlsxBorder None = new XlsxBorder();
 
-        public Line Top { get; }
-        public Line Right { get; }
-        public Line Bottom { get; }
-        public Line Left { get; }
-        public Line Diagonal { get; }
+        public Line? Top { get; }
+        public Line? Right { get; }
+        public Line? Bottom { get; }
+        public Line? Left { get; }
+        public Line? Diagonal { get; }
         public bool DiagonalDown { get; }
         public bool DiagonalUp { get; }
 
-        public XlsxBorder(Line top = null, Line right = null, Line bottom = null, Line left = null,
-            Line diagonal = null, bool diagonalDown = false, bool diagonalUp = false)
+        public XlsxBorder(Line? top = null, Line? right = null, Line? bottom = null, Line? left = null,
+            Line? diagonal = null, bool diagonalDown = false, bool diagonalUp = false)
         {
             Top = top;
             Right = right;
@@ -123,43 +109,41 @@ namespace LargeXlsx
         #region Equality members
         public bool Equals(XlsxBorder other)
         {
-            if (ReferenceEquals(null, other)) return false;
-            if (ReferenceEquals(this, other)) return true;
-            return Equals(Top, other.Top) && Equals(Right, other.Right) && Equals(Bottom, other.Bottom) && Equals(Left, other.Left)
-                   && Equals(Diagonal, other.Diagonal) && DiagonalDown == other.DiagonalDown && DiagonalUp == other.DiagonalUp;
+            return EqualityComparer<Line?>.Default.Equals(Top, other.Top)
+                   && EqualityComparer<Line?>.Default.Equals(Right, other.Right)
+                   && EqualityComparer<Line?>.Default.Equals(Bottom, other.Bottom)
+                   && EqualityComparer<Line?>.Default.Equals(Left, other.Left)
+                   && EqualityComparer<Line?>.Default.Equals(Diagonal, other.Diagonal)
+                   && DiagonalDown == other.DiagonalDown
+                   && DiagonalUp == other.DiagonalUp;
         }
 
         public override bool Equals(object obj)
         {
-            if (ReferenceEquals(null, obj)) return false;
-            if (ReferenceEquals(this, obj)) return true;
-            if (obj.GetType() != this.GetType()) return false;
-            return Equals((XlsxBorder)obj);
+            return obj is XlsxBorder other && Equals(other);
         }
 
         public override int GetHashCode()
         {
-            unchecked
-            {
-                var hashCode = (Top != null ? Top.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Right != null ? Right.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Bottom != null ? Bottom.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Left != null ? Left.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (Diagonal != null ? Diagonal.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ DiagonalDown.GetHashCode();
-                hashCode = (hashCode * 397) ^ DiagonalUp.GetHashCode();
-                return hashCode;
-            }
+            var hashCode = -1403603317;
+            hashCode = hashCode * -1521134295 + EqualityComparer<Line?>.Default.GetHashCode(Top);
+            hashCode = hashCode * -1521134295 + EqualityComparer<Line?>.Default.GetHashCode(Right);
+            hashCode = hashCode * -1521134295 + EqualityComparer<Line?>.Default.GetHashCode(Bottom);
+            hashCode = hashCode * -1521134295 + EqualityComparer<Line?>.Default.GetHashCode(Left);
+            hashCode = hashCode * -1521134295 + EqualityComparer<Line?>.Default.GetHashCode(Diagonal);
+            hashCode = hashCode * -1521134295 + DiagonalDown.GetHashCode();
+            hashCode = hashCode * -1521134295 + DiagonalUp.GetHashCode();
+            return hashCode;
         }
 
-        public static bool operator ==(XlsxBorder left, XlsxBorder right)
+        public static bool operator ==(XlsxBorder border1, XlsxBorder border2)
         {
-            return Equals(left, right);
+            return border1.Equals(border2);
         }
 
-        public static bool operator !=(XlsxBorder left, XlsxBorder right)
+        public static bool operator !=(XlsxBorder border1, XlsxBorder border2)
         {
-            return !Equals(left, right);
+            return !border1.Equals(border2);
         }
         #endregion
     }

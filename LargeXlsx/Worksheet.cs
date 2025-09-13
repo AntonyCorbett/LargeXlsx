@@ -119,7 +119,7 @@ namespace LargeXlsx
             _stream.Dispose();
         }
 
-        public void BeginRow(double? height, bool hidden, XlsxStyle style)
+        public void BeginRow(double? height, bool hidden, XlsxStyle? style)
         {
             CloseLastRow();
             if (CurrentRowNumber == Limits.MaxRowCount)
@@ -139,8 +139,8 @@ namespace LargeXlsx
                 _streamWriter.Write(" ht=\"{0}\" customHeight=\"1\"", height);
             if (hidden)
                 _streamWriter.Write(" hidden=\"1\"");
-            if (style != null)
-                _streamWriter.Write(" s=\"{0}\" customFormat=\"1\"", _stylesheet.ResolveStyleId(style));
+            if (style.HasValue)
+                _streamWriter.Write(" s=\"{0}\" customFormat=\"1\"", _stylesheet.ResolveStyleId(style.Value));
             _streamWriter.Write(">\n");
         }
 
@@ -159,8 +159,7 @@ namespace LargeXlsx
             _needsRef = true;
             CurrentColumnNumber += columnCount;
         }
-
-
+        
         public void Write(XlsxStyle style, int repeatCount)
         {
             EnsureRow();
@@ -222,7 +221,7 @@ namespace LargeXlsx
         public void Write(int value, XlsxStyle style)
         {
             EnsureRow();
-            // <c r="{0}{1}" s="{2}"><v>{3}</v></c>
+            // <c r="{0}{1}" s="{2}"><v>"{3}"</v></c>
             _streamWriter.Write("<c");
             WriteCellRef();
             WriteStyle(style);
@@ -413,7 +412,7 @@ namespace LargeXlsx
             var colsWritten = false;
             foreach (var column in columns)
             {
-                if (column.Hidden || column.Style != null || column.Width.HasValue)
+                if (column.Hidden || column.Style.HasValue || column.Width.HasValue)
                 {
                     if (!colsWritten)
                     {
@@ -424,7 +423,7 @@ namespace LargeXlsx
                     if (column.Width.HasValue) _streamWriter.Write(" width=\"{0}\"", column.Width.Value);
                     if (column.Hidden) _streamWriter.Write(" hidden=\"1\"");
                     if (column.Width.HasValue) _streamWriter.Write(" customWidth=\"1\"");
-                    if (column.Style != null) _streamWriter.Write(" style=\"{0}\"", _stylesheet.ResolveStyleId(column.Style));
+                    if (column.Style.HasValue) _streamWriter.Write(" style=\"{0}\"", _stylesheet.ResolveStyleId(column.Style.Value));
                     _streamWriter.Write("/>\n");
                 }
                 columnIndex += column.Count;

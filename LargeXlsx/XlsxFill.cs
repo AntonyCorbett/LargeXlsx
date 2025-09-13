@@ -25,58 +25,77 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 
 namespace LargeXlsx
 {
-    public class XlsxFill : IEquatable<XlsxFill>
+    public readonly struct XlsxFill : IEquatable<XlsxFill>
     {
         public enum Pattern
         {
             None,
+            Solid,
             Gray125,
-            Solid
+            Gray0625,
+            DarkDown,
+            DarkGray,
+            DarkGrid,
+            DarkHorizontal,
+            DarkTrellis,
+            DarkUp,
+            DarkVertical,
+            LightDown,
+            LightGray,
+            LightGrid,
+            LightHorizontal,
+            LightTrellis,
+            LightUp,
+            LightVertical,
+            MediumGray
         }
 
         public static readonly XlsxFill None = new XlsxFill(Color.White, Pattern.None);
         public static readonly XlsxFill Gray125 = new XlsxFill(Color.White, Pattern.Gray125);
 
-        public Pattern PatternType { get; }
         public Color Color { get; }
+        public Pattern PatternType { get; }
 
         public XlsxFill(Color color, Pattern patternType = Pattern.Solid)
         {
-            PatternType = patternType;
             Color = color;
+            PatternType = patternType;
         }
 
+        #region Equality members
         public override bool Equals(object obj)
         {
-            return Equals(obj as XlsxFill);
+            return obj is XlsxFill other && Equals(other);
         }
 
         public bool Equals(XlsxFill other)
         {
-            return other != null && PatternType == other.PatternType && Color == other.Color;
+            return Color.Equals(other.Color) && PatternType == other.PatternType;
         }
 
         public override int GetHashCode()
         {
-            var hashCode = 493172489;
-            hashCode = hashCode * -1521134295 + PatternType.GetHashCode();
-            hashCode = hashCode * -1521134295 + Color.GetHashCode();
-            return hashCode;
+            unchecked
+            {
+                var hashCode = Color.GetHashCode();
+                hashCode = (hashCode * 397) ^ (int)PatternType;
+                return hashCode;
+            }
         }
 
         public static bool operator ==(XlsxFill fill1, XlsxFill fill2)
         {
-            return EqualityComparer<XlsxFill>.Default.Equals(fill1, fill2);
+            return fill1.Equals(fill2);
         }
 
         public static bool operator !=(XlsxFill fill1, XlsxFill fill2)
         {
-            return !(fill1 == fill2);
+            return !fill1.Equals(fill2);
         }
+        #endregion
     }
 }

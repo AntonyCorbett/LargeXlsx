@@ -89,7 +89,7 @@ namespace LargeXlsx
 
         public int ResolveStyleId(XlsxStyle style)
         {
-            if (ReferenceEquals(style, _lastUsedStyle))
+            if (style.Equals(_lastUsedStyle))
                 return _lastUsedStyleId;
             if (!_styles.TryGetValue(style, out var id))
             {
@@ -212,13 +212,14 @@ namespace LargeXlsx
             streamWriter.WriteLine("</borders>");
         }
 
-        private static void WriteBorderLine(StreamWriter streamWriter, string elementName, XlsxBorder.Line line)
+        private static void WriteBorderLine(StreamWriter streamWriter, string elementName, XlsxBorder.Line? line)
         {
-            if (line != null)
+            if (line.HasValue)
             {
-                streamWriter.Write($"<{elementName} style=\"{Util.EnumToAttributeValue(line.Style)}\">");
-                if (line.Color != Color.Transparent)
-                    streamWriter.Write($"<color rgb=\"{GetColorString(line.Color)}\"/>");
+                var lineValue = line.Value;
+                streamWriter.Write($"<{elementName} style=\"{Util.EnumToAttributeValue(lineValue.Style)}\">");
+                if (lineValue.Color != Color.Transparent)
+                    streamWriter.Write($"<color rgb=\"{GetColorString(lineValue.Color)}\"/>");
                 streamWriter.WriteLine($"</{elementName}>");
             }
             else
@@ -236,10 +237,15 @@ namespace LargeXlsx
                                    + " applyNumberFormat=\"1\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\"",
                     _numberFormats[style.Key.NumberFormat], _fonts[style.Key.Font], _fills[style.Key.Fill],
                     _borders[style.Key.Border]);
-                if (style.Key.Alignment != XlsxAlignment.Default)
+
+                var a = style.Key.Alignment;
+                if (a.Equals(XlsxAlignment.Default))
+                {
+                    streamWriter.WriteLine("/>");
+                }
+                else
                 {
                     streamWriter.Write(" applyAlignment=\"1\"><alignment");
-                    var a = style.Key.Alignment;
                     if (a.HorizontalType != XlsxAlignment.Horizontal.General) streamWriter.Write(" horizontal=\"{0}\"", Util.EnumToAttributeValue(a.HorizontalType));
                     if (a.VerticalType != XlsxAlignment.Vertical.Bottom) streamWriter.Write(" vertical=\"{0}\"", Util.EnumToAttributeValue(a.VerticalType));
                     if (a.Indent != 0) streamWriter.Write(" indent=\"{0}\"", a.Indent);
@@ -249,10 +255,6 @@ namespace LargeXlsx
                     if (a.TextRotation != 0) streamWriter.Write(" textRotation=\"{0}\"", a.TextRotation);
                     if (a.WrapText) streamWriter.Write(" wrapText=\"1\"");
                     streamWriter.WriteLine("/></xf>");
-                }
-                else
-                {
-                    streamWriter.WriteLine("/>");
                 }
             }
             streamWriter.WriteLine("</cellXfs>");

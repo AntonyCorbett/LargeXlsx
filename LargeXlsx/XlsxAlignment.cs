@@ -28,19 +28,8 @@ using System;
 
 namespace LargeXlsx
 {
-    public class XlsxAlignment : IEquatable<XlsxAlignment>
+    public readonly struct XlsxAlignment : IEquatable<XlsxAlignment>
     {
-        public static readonly XlsxAlignment Default = new XlsxAlignment();
-
-        public Horizontal HorizontalType { get; }
-        public Vertical VerticalType { get; }
-        public int Indent { get; }
-        public bool JustifyLastLine { get; }
-        public ReadingOrder ReadingOrderType { get; }
-        public bool ShrinkToFit { get; }
-        public int TextRotation { get; }
-        public bool WrapText { get; }
-
         public enum Horizontal
         {
             General,
@@ -69,6 +58,17 @@ namespace LargeXlsx
             RightToLeft = 2
         }
 
+        public static readonly XlsxAlignment Default = new XlsxAlignment(Horizontal.General, Vertical.Bottom);
+
+        public Horizontal HorizontalType { get; }
+        public Vertical VerticalType { get; }
+        public int Indent { get; }
+        public bool JustifyLastLine { get; }
+        public ReadingOrder ReadingOrderType { get; }
+        public bool ShrinkToFit { get; }
+        public int TextRotation { get; }
+        public bool WrapText { get; }
+
         public XlsxAlignment(Horizontal horizontal = Horizontal.General, Vertical vertical = Vertical.Bottom,
             int indent = 0, bool justifyLastLine = false, ReadingOrder readingOrder = ReadingOrder.ContextDependent,
             bool shrinkToFit = false, int textRotation = 0, bool wrapText = false)
@@ -83,22 +83,22 @@ namespace LargeXlsx
             WrapText = wrapText;
         }
 
-        public bool Equals(XlsxAlignment other)
-        {
-            if (ReferenceEquals(null, other)) return false;
-            if (ReferenceEquals(this, other)) return true;
-            return HorizontalType == other.HorizontalType && VerticalType == other.VerticalType
-                && Indent == other.Indent && JustifyLastLine == other.JustifyLastLine
-                && ReadingOrderType == other.ReadingOrderType && ShrinkToFit == other.ShrinkToFit
-                && TextRotation == other.TextRotation && WrapText == other.WrapText;
-        }
-
+        #region Equality members
         public override bool Equals(object obj)
         {
-            if (ReferenceEquals(null, obj)) return false;
-            if (ReferenceEquals(this, obj)) return true;
-            if (obj.GetType() != this.GetType()) return false;
-            return Equals((XlsxAlignment)obj);
+            return obj is XlsxAlignment other && Equals(other);
+        }
+
+        public bool Equals(XlsxAlignment other)
+        {
+            return HorizontalType == other.HorizontalType
+                   && VerticalType == other.VerticalType
+                   && Indent == other.Indent
+                   && JustifyLastLine == other.JustifyLastLine
+                   && ReadingOrderType == other.ReadingOrderType
+                   && ShrinkToFit == other.ShrinkToFit
+                   && TextRotation == other.TextRotation
+                   && WrapText == other.WrapText;
         }
 
         public override int GetHashCode()
@@ -117,14 +117,15 @@ namespace LargeXlsx
             }
         }
 
-        public static bool operator ==(XlsxAlignment left, XlsxAlignment right)
+        public static bool operator ==(XlsxAlignment alignment1, XlsxAlignment alignment2)
         {
-            return Equals(left, right);
+            return alignment1.Equals(alignment2);
         }
 
-        public static bool operator !=(XlsxAlignment left, XlsxAlignment right)
+        public static bool operator !=(XlsxAlignment alignment1, XlsxAlignment alignment2)
         {
-            return !Equals(left, right);
+            return !alignment1.Equals(alignment2);
         }
+        #endregion
     }
 }

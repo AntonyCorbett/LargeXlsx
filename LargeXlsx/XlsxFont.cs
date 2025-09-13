@@ -30,8 +30,17 @@ using System.Drawing;
 
 namespace LargeXlsx
 {
-    public class XlsxFont : IEquatable<XlsxFont>
+    public readonly struct XlsxFont : IEquatable<XlsxFont>
     {
+        public enum Underline
+        {
+            None,
+            Single,
+            Double,
+            SingleAccounting,
+            DoubleAccounting
+        }
+
         public static readonly XlsxFont Default = new XlsxFont("Calibri", 11, Color.Black);
 
         public string Name { get; }
@@ -41,16 +50,6 @@ namespace LargeXlsx
         public bool Italic { get; }
         public bool Strike { get; }
         public Underline UnderlineType { get; }
-
-
-        public enum Underline
-        {
-            None,
-            Single,
-            Double,
-            SingleAccounting,
-            DoubleAccounting
-        }
 
         public XlsxFont(string name, double size, Color color, bool bold = false, bool italic = false, bool strike = false, Underline underline = Underline.None)
         {
@@ -71,23 +70,27 @@ namespace LargeXlsx
         public XlsxFont WithStrike(bool strike = true) => new XlsxFont(Name, Size, Color, Bold, Italic, strike, UnderlineType);
         public XlsxFont WithUnderline(Underline underline = Underline.Single) => new XlsxFont(Name, Size, Color, Bold, Italic, Strike, underline);
 
+        #region Equality members
         public override bool Equals(object obj)
         {
-            return Equals(obj as XlsxFont);
+            return obj is XlsxFont other && Equals(other);
         }
 
         public bool Equals(XlsxFont other)
         {
-            return other != null
-                   && Name == other.Name && Size == other.Size && Color == other.Color
-                   && Bold == other.Bold && Italic == other.Italic && Strike == other.Strike
+            return Name == other.Name
+                   && Size.Equals(other.Size)
+                   && Color.Equals(other.Color)
+                   && Bold == other.Bold
+                   && Italic == other.Italic
+                   && Strike == other.Strike
                    && UnderlineType == other.UnderlineType;
         }
 
         public override int GetHashCode()
         {
-            var hashCode = -1593953530;
-            hashCode = hashCode * -1521134295 + Name.GetHashCode();
+            var hashCode = -1006025245;
+            hashCode = hashCode * -1521134295 + EqualityComparer<string>.Default.GetHashCode(Name);
             hashCode = hashCode * -1521134295 + Size.GetHashCode();
             hashCode = hashCode * -1521134295 + Color.GetHashCode();
             hashCode = hashCode * -1521134295 + Bold.GetHashCode();
@@ -99,12 +102,13 @@ namespace LargeXlsx
 
         public static bool operator ==(XlsxFont font1, XlsxFont font2)
         {
-            return EqualityComparer<XlsxFont>.Default.Equals(font1, font2);
+            return font1.Equals(font2);
         }
 
         public static bool operator !=(XlsxFont font1, XlsxFont font2)
         {
-            return !(font1 == font2);
+            return !font1.Equals(font2);
         }
+        #endregion
     }
 }

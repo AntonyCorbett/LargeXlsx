@@ -25,11 +25,10 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 using System;
-using System.Collections.Generic;
 
 namespace LargeXlsx
 {
-    public class XlsxStyle : IEquatable<XlsxStyle>
+    public readonly struct XlsxStyle : IEquatable<XlsxStyle>
     {
         public static readonly XlsxStyle Default = new XlsxStyle(XlsxFont.Default, XlsxFill.None, XlsxBorder.None, XlsxNumberFormat.General, XlsxAlignment.Default);
 
@@ -38,7 +37,6 @@ namespace LargeXlsx
         public XlsxBorder Border { get; }
         public XlsxNumberFormat NumberFormat { get; }
         public XlsxAlignment Alignment { get; }
-        private int? _hashCode;
 
         public XlsxStyle(XlsxFont font, XlsxFill fill, XlsxBorder border, XlsxNumberFormat numberFormat, XlsxAlignment alignment)
         {
@@ -58,46 +56,27 @@ namespace LargeXlsx
         #region Equality members
         public override bool Equals(object obj)
         {
-            return Equals(obj as XlsxStyle);
+            return obj is XlsxStyle other && Equals(other);
         }
 
         public bool Equals(XlsxStyle other)
         {
-            return ReferenceEquals(this, other)
-                || other != null
-                && Font.Equals(other.Font)
-                && Fill.Equals(other.Fill)
-                && Border.Equals(other.Border)
-                && NumberFormat.Equals(other.NumberFormat)
-                && Alignment.Equals(other.Alignment);
+            return (Font, Fill, Border, NumberFormat, Alignment).Equals((other.Font, other.Fill, other.Border, other.NumberFormat, other.Alignment));
         }
 
         public override int GetHashCode()
         {
-            if (!_hashCode.HasValue)
-                _hashCode = DoGetHashCode();
-            return _hashCode.Value;
-        }
-
-        private int DoGetHashCode()
-        {
-            var hashCode = 428549002;
-            hashCode = hashCode * -1521134295 + Font.GetHashCode();
-            hashCode = hashCode * -1521134295 + Fill.GetHashCode();
-            hashCode = hashCode * -1521134295 + Border.GetHashCode();
-            hashCode = hashCode * -1521134295 + NumberFormat.GetHashCode();
-            hashCode = hashCode * -1521134295 + Alignment.GetHashCode();
-            return hashCode;
+            return (Font, Fill, Border, NumberFormat, Alignment).GetHashCode();
         }
 
         public static bool operator ==(XlsxStyle style1, XlsxStyle style2)
         {
-            return EqualityComparer<XlsxStyle>.Default.Equals(style1, style2);
+            return style1.Equals(style2);
         }
 
         public static bool operator !=(XlsxStyle style1, XlsxStyle style2)
         {
-            return !(style1 == style2);
+            return !style1.Equals(style2);
         }
         #endregion
     }

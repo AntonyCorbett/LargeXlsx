@@ -29,7 +29,7 @@ using System.Collections.Generic;
 
 namespace LargeXlsx
 {
-    public class XlsxNumberFormat : IEquatable<XlsxNumberFormat>
+    public readonly struct XlsxNumberFormat : IEquatable<XlsxNumberFormat>
     {
         public static readonly XlsxNumberFormat General = new XlsxNumberFormat("general");
         public static readonly XlsxNumberFormat Integer = new XlsxNumberFormat("0");
@@ -42,7 +42,7 @@ namespace LargeXlsx
         public static readonly XlsxNumberFormat ShortDate = new XlsxNumberFormat("dd/mm/yyyy");
         public static readonly XlsxNumberFormat ShortDateTime = new XlsxNumberFormat("dd/mm/yyyy hh:mm");
         public static readonly XlsxNumberFormat Text = new XlsxNumberFormat("@");
-        
+
         public string FormatCode { get; }
 
         public XlsxNumberFormat(string formatCode)
@@ -50,29 +50,31 @@ namespace LargeXlsx
             FormatCode = formatCode;
         }
 
+        #region Equality members
         public override bool Equals(object obj)
         {
-            return Equals(obj as XlsxNumberFormat);
+            return obj is XlsxNumberFormat other && Equals(other);
         }
 
         public bool Equals(XlsxNumberFormat other)
         {
-            return other != null && FormatCode == other.FormatCode;
+            return FormatCode == other.FormatCode;
         }
 
         public override int GetHashCode()
         {
-            return FormatCode.GetHashCode();
+            return -1565796246 + EqualityComparer<string>.Default.GetHashCode(FormatCode);
         }
 
         public static bool operator ==(XlsxNumberFormat format1, XlsxNumberFormat format2)
         {
-            return EqualityComparer<XlsxNumberFormat>.Default.Equals(format1, format2);
+            return format1.Equals(format2);
         }
 
         public static bool operator !=(XlsxNumberFormat format1, XlsxNumberFormat format2)
         {
-            return !(format1 == format2);
+            return !format1.Equals(format2);
         }
+        #endregion
     }
 }

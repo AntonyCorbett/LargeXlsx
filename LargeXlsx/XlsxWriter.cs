@@ -275,8 +275,13 @@ namespace LargeXlsx
                 AddMergedCell(1, columnSpan).Write(style, 1).Write(style, repeatCount: columnSpan - 1);
             return this;
         }
-
+        
         public XlsxWriter Write(string value, XlsxStyle style = null, int columnSpan = 1)
+        {
+            return Write(value.AsSpan(), style, columnSpan);
+        }
+
+        public XlsxWriter Write(ReadOnlySpan<char> value, XlsxStyle style = null, int columnSpan = 1)
         {
             if (columnSpan == 1)
             {

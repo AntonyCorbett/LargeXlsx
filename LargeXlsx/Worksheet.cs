@@ -197,6 +197,27 @@ namespace LargeXlsx
             CurrentColumnNumber++;
         }
 
+        public void Write(ReadOnlySpan<char> value, XlsxStyle style)
+        {
+            if (value.IsEmpty)
+            {
+                Write(style, 1);
+                return;
+            }
+            EnsureRow();
+            // <c r="{0}{1}" s="{2}" t="inlineStr"><is><t xml:space="preserve">{3}</t></is></c>
+            _streamWriter.Write("<c");
+            WriteCellRef();
+            WriteStyle(style);
+            _streamWriter.Write(" t=\"inlineStr\"><is><t");
+            if (value.Length > 0 && (char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[value.Length - 1])))
+                _streamWriter.Write(" xml:space=\"preserve\"");
+            _streamWriter.Write(">");
+            _streamWriter.WriteEscapedXmlText(value, _skipInvalidCharacters);
+            _streamWriter.Write("</t></is></c>\n");
+            CurrentColumnNumber++;
+        }
+
         public void Write(double value, XlsxStyle style)
         {
             EnsureRow();

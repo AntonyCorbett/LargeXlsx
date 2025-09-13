@@ -88,9 +88,8 @@ namespace LargeXlsx
             return textWriter;
         }
 
-        public static TextWriter AppendEscapedXmlAttribute(this TextWriter textWriter, string value, bool skipInvalidCharacters)
+        public static void WriteEscapedXmlText(this TextWriter textWriter, ReadOnlySpan<char> value, bool skipInvalidCharacters)
         {
-            // A plain old for provides a measurable improvement on garbage collection
             for (var i = 0; i < value.Length; i++)
             {
                 var c = value[i];
@@ -109,9 +108,14 @@ namespace LargeXlsx
                     textWriter.Write(value[i + 1]);
                     i++;
                 }
-                else if (!skipInvalidCharacters) 
-                    throw new XmlException($"Invalid XML character at position {i} in \"{value}\"");
+                else if (!skipInvalidCharacters)
+                    throw new XmlException($"Invalid XML character at position {i}");
             }
+        }
+
+        public static TextWriter AppendEscapedXmlAttribute(this TextWriter textWriter, string value, bool skipInvalidCharacters)
+        {
+            WriteEscapedXmlText(textWriter, value.AsSpan(), skipInvalidCharacters);
             return textWriter;
         }
 

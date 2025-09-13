@@ -88,7 +88,7 @@ namespace LargeXlsx
             return textWriter;
         }
 
-        public static void WriteEscapedXmlText(this TextWriter textWriter, ReadOnlySpan<char> value, bool skipInvalidCharacters)
+        public static void WriteEscapedXmlAttribute(this TextWriter textWriter, ReadOnlySpan<char> value, bool skipInvalidCharacters)
         {
             for (var i = 0; i < value.Length; i++)
             {
@@ -115,7 +115,7 @@ namespace LargeXlsx
 
         public static TextWriter AppendEscapedXmlAttribute(this TextWriter textWriter, string value, bool skipInvalidCharacters)
         {
-            WriteEscapedXmlText(textWriter, value.AsSpan(), skipInvalidCharacters);
+            WriteEscapedXmlAttribute(textWriter, value.AsSpan(), skipInvalidCharacters);
             return textWriter;
         }
 

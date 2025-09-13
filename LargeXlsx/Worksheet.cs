@@ -213,7 +213,7 @@ namespace LargeXlsx
             if (value.Length > 0 && (char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[value.Length - 1])))
                 _streamWriter.Write(" xml:space=\"preserve\"");
             _streamWriter.Write(">");
-            _streamWriter.WriteEscapedXmlText(value, _skipInvalidCharacters);
+            _streamWriter.WriteEscapedXmlAttribute(value, _skipInvalidCharacters);
             _streamWriter.Write("</t></is></c>\n");
             CurrentColumnNumber++;
         }

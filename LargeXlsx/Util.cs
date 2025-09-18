@@ -33,7 +33,7 @@ using System.Xml;
 
 namespace LargeXlsx
 {
-    internal static class Util
+    public static class Util
     {
         private static readonly DateTime ExcelEpoch = new DateTime(1900, 1, 1);
         private static readonly DateTime Date19000301 = new DateTime(1900, 3, 1);

@@ -559,5 +559,65 @@ namespace LargeXlsx
                 _streamWriter.Write("</colBreaks>\n");
             }
         }
+
+        public void WriteRow(IEnumerable<string> values, XlsxStyle style)
+        {
+            EnsureRow();
+            var resolvedStyle = style ?? XlsxStyle.Default;
+            foreach (var value in values)
+            {
+                Write(value, resolvedStyle);
+            }
+        }
+
+        public void WriteRow(IEnumerable<double> values, XlsxStyle style)
+        {
+            EnsureRow();
+            var resolvedStyle = style ?? XlsxStyle.Default;
+            foreach (var value in values)
+            {
+                Write(value, resolvedStyle);
+            }
+        }
+
+        public void WriteRow(IEnumerable<int> values, XlsxStyle style)
+        {
+            EnsureRow();
+            var resolvedStyle = style ?? XlsxStyle.Default;
+            foreach (var value in values)
+            {
+                Write(value, resolvedStyle);
+            }
+        }
+
+        public void WriteRow(IEnumerable<decimal> values, XlsxStyle style)
+        {
+            EnsureRow();
+            var resolvedStyle = style ?? XlsxStyle.Default;
+            foreach (var value in values)
+            {
+                Write(value, resolvedStyle);
+            }
+        }
+
+        public void WriteRow(IEnumerable<bool> values, XlsxStyle style)
+        {
+            EnsureRow();
+            var resolvedStyle = style ?? XlsxStyle.Default;
+            foreach (var value in values)
+            {
+                Write(value, resolvedStyle);
+            }
+        }
+
+        public void WriteRow(IEnumerable<DateTime> values, XlsxStyle style)
+        {
+            EnsureRow();
+            var resolvedStyle = style ?? XlsxStyle.Default;
+            foreach (var value in values)
+            {
+                Write(Util.DateToDouble(value), resolvedStyle);
+            }
+        }
     }
 }

@@ -445,5 +445,47 @@ namespace LargeXlsx
             if (_currentWorksheet == null)
                 throw new InvalidOperationException($"{nameof(BeginWorksheet)} not called");
         }
+
+        public XlsxWriter WriteRow(IEnumerable<string> values, XlsxStyle style = null)
+        {
+            CheckInWorksheet();
+            _currentWorksheet.WriteRow(values, style ?? DefaultStyle);
+            return this;
+        }
+
+        public XlsxWriter WriteRow(IEnumerable<double> values, XlsxStyle style = null)
+        {
+            CheckInWorksheet();
+            _currentWorksheet.WriteRow(values, style ?? DefaultStyle);
+            return this;
+        }
+
+        public XlsxWriter WriteRow(IEnumerable<int> values, XlsxStyle style = null)
+        {
+            CheckInWorksheet();
+            _currentWorksheet.WriteRow(values, style ?? DefaultStyle);
+            return this;
+        }
+
+        public XlsxWriter WriteRow(IEnumerable<decimal> values, XlsxStyle style = null)
+        {
+            CheckInWorksheet();
+            _currentWorksheet.WriteRow(values, style ?? DefaultStyle);
+            return this;
+        }
+
+        public XlsxWriter WriteRow(IEnumerable<bool> values, XlsxStyle style = null)
+        {
+            CheckInWorksheet();
+            _currentWorksheet.WriteRow(values, style ?? DefaultStyle);
+            return this;
+        }
+
+        public XlsxWriter WriteRow(IEnumerable<DateTime> values, XlsxStyle style = null)
+        {
+            CheckInWorksheet();
+            _currentWorksheet.WriteRow(values, style ?? DefaultStyle);
+            return this;
+        }
     }
 }
